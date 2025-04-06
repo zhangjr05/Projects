@@ -39,9 +39,6 @@ pip install pygame
 - `utils.py`: 工具和常量
 - `records.json`: 历史分数记录
 
-## 许可证
-No License
-
 ## 游戏截图
 
-![2048游戏截图](screenshots/demo.jpg)
+<img src="screenshots\demo.jpg" width="400" alt="2048 game" align="left">

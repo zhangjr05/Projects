@@ -260,9 +260,9 @@ def save_to_sql():
     try:
         with connection.cursor() as cursor:
             # 创建数据库
-            cursor.execute("CREATE DATABASE IF NOT EXISTS douban_movies_top250")
+            cursor.execute("CREATE DATABASE IF NOT EXISTS douban_movies")
 
-            cursor.execute("USE douban_movies_top250")
+            cursor.execute("USE douban_movies")
 
             cursor.execute("""
             CREATE TABLE IF NOT EXISTS movies(

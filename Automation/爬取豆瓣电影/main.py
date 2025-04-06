@@ -10,8 +10,8 @@ from bs4 import BeautifulSoup
 # 设定你的 mysql 密码
 password = 'your password'
 
-# 设定要爬取的电影部数
-MOVIE_NUMS = 10
+# 设定要爬取的电影(第i部到第j部)
+MOVIE_RANGE = (1, 10)
 
 # 设置每部电影要爬的短评数
 COMMENT_COUNT = 60
@@ -347,7 +347,7 @@ def main():
         print(f"共获取到 {len(movie_links)} 部电影链接")
         
         # 爬取每部电影的详细信息
-        for idx, movie_url in enumerate(movie_links[:MOVIE_NUMS]):  # 只爬取前 MOVIE_NUMS 部电影
+        for idx, movie_url in enumerate(movie_links[MOVIE_RANGE[0] - 1 : MOVIE_RANGE[1]]):  # 只爬取前 MOVIE_NUMS 部电影
             print(f"正在爬取第 {idx + 1} 部电影")
             movie_details = get_movie_details(movie_url)
             all_movies.append(movie_details)

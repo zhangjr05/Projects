@@ -8,7 +8,7 @@ import requests
 from bs4 import BeautifulSoup
 
 # 设定你的 mysql 密码
-password = 'your password'
+PASSWORD = 'your password'
 
 # 设定要爬取的电影(第i部到第j部)
 MOVIE_RANGE = (1, 10)
@@ -255,7 +255,7 @@ def save_to_sql():
     connection = pymysql.connect(
         host='localhost',
         user='root',
-        password=password
+        password=PASSWORD
     )
     try:
         with connection.cursor() as cursor:

@@ -175,7 +175,7 @@ THEMES = {
 }
 
 # 当前主题
-CURRENT_THEME = "neon"
+CURRENT_THEME = "classic"
 
 # 背景和空格子颜色直接使用主题中的定义
 BACKGROUND_COLOR = THEMES[CURRENT_THEME]["background"]

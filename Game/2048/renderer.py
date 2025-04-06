@@ -56,7 +56,7 @@ class GameRenderer:
         # 绘制分数
         self._draw_score(game.get_score(), game.high_score)
 
-        # 处理破纪录通知 (记录都是AI破的，你没那个实力hhh)
+        # 处理破纪录通知 (记录都是AI破的...)
         self._handle_record_notification(game)
         
         # 绘制游戏状态
@@ -71,7 +71,7 @@ class GameRenderer:
         '''处理破纪录通知的显示'''
         current_time = pygame.time.get_ticks()
         
-        # 检查是否破纪录并显示通知 (这是永假式(bushi)
+        # 检查是否破纪录并显示通知 
         if game.new_record and not self.show_record:
             self.show_record = True
             self.record_time = current_time
@@ -89,7 +89,7 @@ class GameRenderer:
             for j in range(GRID_SIZE):
                 # 计算格子位置
                 x = j * CELL_SIZE + (j + 1) * PADDING
-                y = i * CELL_SIZE + (i + 1) * PADDING + SCORE_AREA # 注意SCORE_AREA区域用来显示分数
+                y = i * CELL_SIZE + (i + 1) * PADDING + SCORE_AREA # SCORE_AREA区域用来显示分数
                 value = grid[i][j]
 
                 # 设置格子颜色
@@ -132,7 +132,7 @@ class GameRenderer:
         overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
 
         if state == GAME_WON:
-            overlay.fill((255, 223, 0, 180))
+            overlay.fill((255, 255, 255, 180))
         else:
             overlay.fill((255, 255, 255, 150))
             

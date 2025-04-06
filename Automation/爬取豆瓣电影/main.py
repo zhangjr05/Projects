@@ -3,9 +3,12 @@ import re
 import time
 import json
 import random
+import pymysql
 import requests
 from bs4 import BeautifulSoup
 
+# 设定你的 mysql 密码
+password = 'your password'
 
 # 设定要爬取的电影部数
 MOVIE_NUMS = 10
@@ -247,6 +250,94 @@ def save_to_json(data, filename):
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
+
+def save_to_sql():
+    connection = pymysql.connect(
+        host='localhost',
+        user='root',
+        password=password
+    )
+    try:
+        with connection.cursor() as cursor:
+            # 创建数据库
+            cursor.execute("CREATE DATABASE IF NOT EXISTS douban_movies_top250")
+
+            cursor.execute("USE douban_movies_top250")
+
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS movies(
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                no INT NOT NULL,
+                name VARCHAR(255) NOT NULL,
+                rating DECIMAL(3,1) NOT NULL,
+                rating_count INT NOT NULL,
+                year INT NOT NULL,
+                country VARCHAR(255),
+                language VARCHAR(255),
+                runtime VARCHAR(100),
+                IMDb VARCHAR(20),
+                intro TEXT,
+                directors TEXT,
+                scriptwriters TEXT,
+                stars TEXT,
+                genres TEXT,
+                screening_dates TEXT,
+                other_name TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+            """)
+
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS comments(
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                movie_id INT NOT NULL,
+                author VARCHAR(100),
+                time DATETIME,
+                content TEXT,
+                rating VARCHAR(10),
+                useful INT,
+                FOREIGN KEY (movie_id) REFERENCES movies(id) ON DELETE CASCADE
+            ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+            """)
+
+            # 读取JSON数据
+            with open(get_json_path(), 'r', encoding='utf-8') as f:
+                movies_data = json.load(f)
+
+            # 插入数据
+            for movie in movies_data:
+                no = int(movie['no'])
+                rating = float(movie['rating'])
+                rating_count = int(movie['rating_count'])
+                year = int(movie['year'])
+                directors = ','.join(movie['directors'])
+                scriptwriters = ','.join(movie['scriptwriters'])
+                stars = ','.join(movie['stars'])
+                genres = ','.join(movie['genres'])
+                screening_dates = ','.join(movie['screening_dates'])
+                other_name = ','.join(movie['other_name'])
+
+                cursor.execute(
+                    "INSERT INTO movies (no, name, rating, rating_count, year, country, language, runtime, IMDb, intro, directors, scriptwriters, stars, genres, screening_dates, other_name)"
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    (no, movie['name'], rating, rating_count, year, movie['country'], movie['language'], movie['runtime'], movie['IMDb'], movie['intro'], directors, scriptwriters, stars, genres, screening_dates, other_name)
+                )
+
+                for comment in movie['short_comments']:
+                    useful = int(comment['useful'])
+                    cursor.execute(
+                        "INSERT INTO comments (movie_id, author, time, content, rating, useful)" 
+                        "VALUES (%s, %s, %s, %s, %s, %s)",
+                        (no, comment['author'], comment['time'], comment['content'], comment['rating'], useful)
+                    )
+            connection.commit()
+
+    except Exception as e:
+        print(f'出错了: {e}')
+        connection.rollback()
+    finally:
+        connection.close()
+
 def main():
     all_movies = []
     try:
@@ -265,6 +356,8 @@ def main():
         # 保存到 JSON 文件
         save_to_json(all_movies, json_path)
         print("爬取顺利完成  数据已保存到 douban_movies.json 文件中")
+        save_to_sql()
+        print('数据成功存储到 mysql 数据库中')
     
     except Exception as e:
         print(f"程序执行过程中出错: {e}")

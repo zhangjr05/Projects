@@ -6,7 +6,3 @@ A gallery of whispers and sparks, where curiosity took root and ideas grew wings
 QQ: 3508835924<br>
 WeChat: J18027726030<br>
 email: 241300022@smail.nju.edu.cn
-
-## 请作者喝杯下午茶~~
-
-<img src="info/thanks.jpg" width="600" alt="THANKS" align="left">

@@ -20,13 +20,13 @@ transform = transforms.Compose([
 ])
 # 下载训练集和测试集
 train_dataset = torchvision.datasets.MNIST(
-    root=f'{script_dir}/data',  # 指定存储路径
+    root=os.path.join(script_dir, 'data'),  # 指定存储路径
     train=True,  # 指定训练集
     download=True,  # 如果数据不存在则下载
     transform=transform  # 应用上面定义的变换
 )
 test_dataset = torchvision.datasets.MNIST(
-    root='./data', 
+    root=os.path.join(script_dir, 'data'),  # 指定存储路径
     train=False,  # 指定测试集
     download=True, 
     transform=transform

@@ -340,8 +340,6 @@ def analyze_class_performance():
     plt.ylim([0, 100])
     plt.xticks(rotation=45)
     
-    # 保存类别性能图
-    plt.savefig(os.path.join(script_dir, 'cifar10_class_performance.png'))
     plt.tight_layout()
     plt.show()
 

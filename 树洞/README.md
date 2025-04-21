@@ -1,3 +1,3 @@
-## WELCOME
+# WELCOME
 
-But, what is it?
+WHAT IS IT?

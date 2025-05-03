@@ -7,7 +7,7 @@ class Greedy_AI2048:
     2048游戏的AI类定义 使用贪婪搜索策略
     """
     def __init__(self, game=None):
-        # 继承一下当前的game就完事了 AI是接盘侠
+        # 继承当前的game
         self.game = game
     
     def get_move(self) -> int:

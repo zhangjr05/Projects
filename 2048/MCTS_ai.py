@@ -1,9 +1,9 @@
+from utils import *
+from Greedy_ai import Greedy_AI2048
 import copy
 import time
 import random
 import numpy as np
-from utils import *
-from Greedy_ai import Greedy_AI2048
 
 class MCTSNode:
     def __init__(self, game, parent=None, move=None):
@@ -14,52 +14,50 @@ class MCTSNode:
         self.visits = 0
         self.score = 0
         self.untried_moves = self._get_untried_moves()
-
+    
     def _get_untried_moves(self):
-        """快速获取有效移动 - 减少深拷贝"""
+        """获取未尝试的移动"""
         valid_moves = []
         for direction in range(4):
-            # 使用浅拷贝替代深拷贝
-            game_copy = self._fast_copy_game(self.game)
+            game_copy = copy.deepcopy(self.game)
             if game_copy.move(direction):
                 valid_moves.append(direction)
         return valid_moves
     
-    def _fast_copy_game(self, game):
-        """创建游戏的快速浅拷贝，仅用于检查移动有效性"""
-        game_copy = copy.copy(game)  # 浅拷贝
-        game_copy.grid = [row[:] for row in game.grid]  # 只深拷贝网格
-        return game_copy
-
     def add_child(self, move):
-        """添加子节点 - 优化拷贝"""
+        """添加子节点"""
         game_copy = copy.deepcopy(self.game)
         game_copy.move(move)
         child = MCTSNode(game_copy, self, move)
         self.untried_moves.remove(move)
         self.children[move] = child
         return child
-
+    
     def update(self, score):
+        """更新节点信息"""
         self.visits += 1
         self.score += score
-
+    
     def fully_expanded(self):
+        """是否已完全扩展"""
         return len(self.untried_moves) == 0
-
+    
     def best_child(self, exploration_weight=1.0):
-        """极简版UCB选择 - 避免不必要的NumPy转换"""
+        """根据UCB选择最佳子节点"""
         if not self.children:
             return None
             
-        # 手动计算UCB，避免小数据集上的NumPy开销
         best_score = float('-inf')
         best_child = None
         
         for child in self.children.values():
-            # 标准UCB公式
-            exploit = child.score / max(child.visits, 1)
-            explore = exploration_weight * (2 * np.log(max(1, self.visits)) / max(1, child.visits))**0.5
+            # 未访问节点优先
+            if child.visits == 0:
+                return child
+                
+            # UCB计算
+            exploit = child.score / child.visits
+            explore = exploration_weight * np.sqrt(2 * np.log(self.visits) / child.visits)
             ucb = exploit + explore
             
             if ucb > best_score:
@@ -70,177 +68,207 @@ class MCTSNode:
 
 
 class MCTS_AI2048(Greedy_AI2048):
-    """使用蒙特卡洛树搜索的2048AI (高性能版)"""
-    def __init__(self, game=None, simulation_time=0.3):  # 默认搜索时间减少
+    """MCTS实现"""
+    
+    def __init__(self, game=None, simulation_time=0.2):
         super().__init__(game)
         self.simulation_time = simulation_time
-        # 使用字典而不是set作为缓存，更快的查找
-        self.evaluation_cache = {}
-        
+        self.stats = {"simulations": 0, "greedy_used": 0, "mcts_used": 0}
+    
     def get_move(self):
+        """结合贪婪搜索与MCTS的决策"""
         if not self.game:
             return random.randint(0, 3)
         
+        # 第一步：直接使用贪婪搜索找到基准移动
+        depth = 3
+        greedy_move, _ = self._look_ahead(self.game, depth)
+        
+        if greedy_move is None:
+            greedy_move = random.randint(0, 3)
+        
+        # 第二步：使用MCTS进行搜索
         root = MCTSNode(self.game)
         
-        # 快速路径
-        if len(root.untried_moves) == 1:
-            return root.untried_moves[0]
-            
-        # 急速评估，优先选择明显较好的移动
-        if len(root.untried_moves) > 1:
-            scores = []
-            for move in root.untried_moves:
-                game_copy = self._fast_copy_game(self.game)
-                game_copy.move(move)
-                scores.append(self._evaluate_cached(game_copy))
-            
-            best_idx = scores.index(max(scores))
-            if scores[best_idx] > sum(scores)/len(scores) * 1.3:
-                return root.untried_moves[best_idx]
+        # 特殊情况快速处理
+        if len(root.untried_moves) <= 1:
+            self.stats["greedy_used"] += 1
+            return greedy_move
         
-        # 动态搜索时间
-        adjusted_time = min(self.simulation_time, 0.1 + len(root.untried_moves)*0.05)
+        # 标准MCTS搜索
+        mcts_move = self._mcts_search(root)
         
-        # MCTS主循环
+        # 第三步：评估和比较两种移动
+        if mcts_move == greedy_move:
+            # 两者一致，直接使用
+            self.stats["greedy_used"] += 1
+            return greedy_move
+        
+        # 两者不一致，比较质量
+        greedy_game = copy.deepcopy(self.game)
+        greedy_game.move(greedy_move)
+        greedy_score = self._evaluate(greedy_game)
+        
+        mcts_game = copy.deepcopy(self.game)
+        mcts_game.move(mcts_move)
+        mcts_score = self._evaluate(mcts_game)
+        
+        # 选择评分更高的移动，保证性能不低于贪婪搜索
+        if mcts_score >= greedy_score:
+            self.stats["mcts_used"] += 1
+            return mcts_move
+        else:
+            self.stats["greedy_used"] += 1
+            return greedy_move
+    
+    def _mcts_search(self, root):
+        """执行标准MCTS搜索过程"""
         start_time = time.time()
-        while time.time() - start_time < adjusted_time:
+        iteration = 0
+        
+        while time.time() - start_time < self.simulation_time:
+            # 1. 选择
             node = self._select(root)
+            
+            # 2. 扩展
             if node.untried_moves and not self._is_terminal(node.game):
                 node = self._expand(node)
-            reward = self._simulate_fast(node)  # 使用快速模拟
+            
+            # 3. 模拟
+            reward = self._simulate(node)
+            
+            # 4. 回溯
             self._backpropagate(node, reward)
+            
+            iteration += 1
         
-        # 选择最佳移动 - 简化计算
+        self.stats["simulations"] += iteration
+        
+        # 选择访问次数最多的移动
         if not root.children:
-            return random.choice(root.untried_moves) if root.untried_moves else random.randint(0, 3)
+            return random.choice(root.untried_moves) if root.untried_moves else 0
         
+        best_visits = -1
         best_move = None
-        best_value = float('-inf')
         
         for move, child in root.children.items():
-            # 更快的评分计算
-            value = child.score / max(1, child.visits)
-            if value > best_value:
-                best_value = value
+            if child.visits > best_visits:
+                best_visits = child.visits
                 best_move = move
         
         return best_move
     
-    def _fast_copy_game(self, game):
-        """创建游戏的快速浅拷贝，仅用于检查移动有效性"""
-        game_copy = copy.copy(game)  # 浅拷贝
-        game_copy.grid = [row[:] for row in game.grid]  # 只深拷贝网格
-        return game_copy
-
     def _select(self, node):
-        current_node = node
-        while not self._is_terminal(current_node.game) and current_node.fully_expanded():
-            child = current_node.best_child()
+        """选择阶段 - 使用UCB下降树"""
+        current = node
+        
+        while not self._is_terminal(current.game) and current.fully_expanded():
+            child = current.best_child(exploration_weight=0.7)  # 降低探索权重，偏好利用
             if not child:
-                return current_node
-            current_node = child
-        return current_node
-
+                break
+            current = child
+        
+        return current
+    
     def _expand(self, node):
+        """扩展阶段 - 使用评估函数指导扩展"""
         if not node.untried_moves:
             return node
-            
-        # 快速扩展 - 减少评估次数
-        if random.random() < 0.3 or len(node.untried_moves) <= 1:
-            # 70%随机选择，提高速度
-            best_move = random.choice(node.untried_moves)
-        else:
-            # 仅在30%情况下评估
-            moves = node.untried_moves
-            best_move = None
-            best_score = float('-inf')
-            
-            for move in moves:
-                game_copy = self._fast_copy_game(self.game)
-                game_copy.move(move)
-                score = self._evaluate_cached(game_copy)
+        
+        # 使用评估函数选择扩展方向
+        best_score = float('-inf')
+        best_moves = []
+        
+        for move in node.untried_moves:
+            game_copy = copy.deepcopy(node.game)
+            if game_copy.move(move):
+                score = self._evaluate(game_copy)
+                
                 if score > best_score:
                     best_score = score
-                    best_move = move
-            
-        return node.add_child(best_move)
-
-    def _simulate_fast(self, node):
-        """优化的快速模拟 - 减少模拟步数和评估次数"""
-        game = self._fast_copy_game(node.game)
-        initial_value = self._evaluate_cached(game)
+                    best_moves = [move]
+                elif score == best_score:
+                    best_moves.append(move)
         
-        # 减少模拟步数
-        max_steps = 12  # 从20减少到12
+        # 从最佳移动中随机选择
+        expand_move = random.choice(best_moves) if best_moves else random.choice(node.untried_moves)
+        return node.add_child(expand_move)
+    
+    def _simulate(self, node):
+        """模拟阶段 - 使用贪婪AI的评估函数指导w'w'w'wwwww"""
+        game = copy.deepcopy(node.game)
+        
+        # 保存初始状态评估
+        initial_eval = self._evaluate(game)
+        
+        # 快速模拟，限制步数
+        depth = 5
         steps = 0
         
-        while game.get_game_state() == 0 and steps < max_steps:
-            # 快速获取有效移动
+        while game.get_game_state() == 0 and steps < depth:
+            # 获取有效移动
             valid_moves = []
-            
             for direction in range(4):
-                temp_game = self._fast_copy_game(game)
+                temp_game = copy.deepcopy(game)
                 if temp_game.move(direction):
                     valid_moves.append(direction)
             
             if not valid_moves:
                 break
+            
+            
+            best_move = random.choice(valid_moves)
+            best_score = float('-inf')
+            
+            for direction in valid_moves:
+                temp_game = copy.deepcopy(game)
+                temp_game.move(direction)
+                score = self._evaluate(temp_game)
                 
-            # 简化移动选择 - 90%随机移动
-            if steps > 3 or random.random() < 0.9:
-                move = random.choice(valid_moves)
-            else:
-                # 仅在前几步或10%情况下评估
-                best_score = float('-inf')
-                best_move = valid_moves[0]
-                
-                for move in valid_moves:
-                    temp_game = self._fast_copy_game(game)
-                    temp_game.move(move)
-                    score = self._evaluate_cached(temp_game)
-                    if score > best_score:
-                        best_score = score
-                        best_move = move
-                        
-                move = best_move
-                
-            game.move(move)
+                if score > best_score:
+                    best_score = score
+                    best_move = direction
+            
+            # 执行移动
+            game.move(best_move)
+            
+            # 添加随机方块
+            empty_cells = []
+            for i in range(4):
+                for j in range(4):
+                    if game.grid[i][j] == 0:
+                        empty_cells.append((i, j))
+            
+            if empty_cells:
+                i, j = random.choice(empty_cells)
+                game.grid[i][j] = 2 if random.random() < 0.9 else 4
+            
             steps += 1
         
-        # 快速计算奖励
-        final_value = self._evaluate_cached(game)
-        reward = final_value - initial_value
+        # 计算奖励 - 使用评估函数
+        final_eval = self._evaluate(game)
+        reward = final_eval - initial_eval
         
-        # 简化终局处理
-        if game.get_game_state() == 2:
-            reward *= 0.5
-            
+        # 特殊状态奖励调整
+        if game.get_game_state() == 1:  # 胜利
+            reward += 10000
+        elif game.get_game_state() == 2 and steps < 3:  # 快速失败
+            reward -= 1000
+        
         return reward
-
-    def _evaluate_cached(self, game):
-        """优化的缓存评估"""
-        # 简化缓存键 - 使用字符串而不是元组
-        grid_str = str(game.get_grid())
-        key = (grid_str, game.get_score())
-        
-        if key in self.evaluation_cache:
-            return self.evaluation_cache[key]
-        
-        # 调用父类的评估函数
-        result = super()._evaluate(game)
-        
-        # 只缓存近期结果
-        if len(self.evaluation_cache) < 1000:  # 减小缓存大小
-            self.evaluation_cache[key] = result
-        
-        return result
-
+    
     def _backpropagate(self, node, reward):
+        """回溯阶段 - 更新节点统计信息"""
         current = node
+        
         while current:
             current.update(reward)
             current = current.parent
-
+    
     def _is_terminal(self, game):
+        """检查游戏是否结束"""
         return game.get_game_state() != 0
+    
+    def get_stats(self):
+        """获取统计信息"""
+        return self.stats

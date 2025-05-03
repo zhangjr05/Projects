@@ -12,15 +12,13 @@ GAME_WON = 1 # 在庆祝信息显示1s后恢复运行状态
 GAME_LOST = 2 # 游戏结束运行，等待用户操作
 
 # 随机生成2的概率
-RANDOM_P_TWO = 0.8
+RANDOM_P_TWO = 0.9
 
-# 太难赢了怎么办？
-# 把参数改掉呗，为什么一定要生成2和4，哈哈哈
 TWO = 2
 FOUR = 4
 
-# AI移动延迟 (ms) 调节风扇声音大小
-AI_DELAY = 100
+# AI移动延迟 (ms)
+AI_DELAY = 80
 
 # 主题定义
 THEMES = {

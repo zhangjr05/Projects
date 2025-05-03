@@ -3,7 +3,9 @@ import random
 import pygame
 from utils import *
 from renderer import GameRenderer
-from ai import AI2048
+from Greedy_ai import Greedy_AI2048
+from MCTS_ai import MCTS_AI2048
+from LLM import LLM_AI2048
 
 
 class Game2048:
@@ -196,8 +198,8 @@ def run():
     # 设置游戏时钟
     clock = pygame.time.Clock()
 
-    # AI移动延迟 (ms)
-    ai_mode = False
+    # 游戏模式: "human", "greedy_ai", "mcts_ai"
+    game_mode = "human"
     ai_delay = AI_DELAY
     last_ai_move_time = 0
     ai = None  # 初始化AI对象为None
@@ -213,8 +215,8 @@ def run():
                 running = False
 
             if event.type == pygame.KEYDOWN:
-                # 只有在非AI模式下才响应方向键(玩家不能干扰AI决策)
-                if not ai_mode and game.get_game_state() == GAME_RUNNING:
+                # 只有在人类模式下才响应方向键
+                if game_mode == "human" and game.get_game_state() == GAME_RUNNING:
                     if event.key == pygame.K_UP:
                         game.move(0)
                     elif event.key == pygame.K_RIGHT:
@@ -228,18 +230,39 @@ def run():
                     # 保存当前分数
                     save_score(game.get_score())
                     game = Game2048()
-                    if ai_mode:
-                        ai = AI2048(game)  # 重新初始化AI对象
+                    if game_mode != "human":
+                        if game_mode == "greedy_ai":
+                            ai = Greedy_AI2048(game)
+                        else:  # mcts_ai
+                            ai = MCTS_AI2048(game)
 
-                # A键切换AI/人类模式
-                if event.key == pygame.K_a:
-                    ai_mode = not ai_mode
-                    if ai_mode:
-                        ai = AI2048(game)  # 初始化AI对象
-                    print(f"{'AI' if ai_mode else '人类'} 模式")
+                # H键切换到人类模式
+                if event.key == pygame.K_h and game_mode != "human":
+                    game_mode = "human"
+                    ai = None
+                    print("人类模式")
+                
+                # A键切换到贪婪AI模式
+                elif event.key == pygame.K_a and game_mode != "greedy_ai":
+                    game_mode = "greedy_ai"
+                    ai = Greedy_AI2048(game)
+                    print("贪婪AI模式")
+                
+                # M键切换到MCTS模式
+                elif event.key == pygame.K_m and game_mode != "mcts_ai":
+                    game_mode = "mcts_ai"
+                    ai = MCTS_AI2048(game)
+                    print("MCTS AI模式")
+
+                # L键切换到LLM模式
+                elif event.key == pygame.K_l and game_mode != "llm_ai":
+                    game_mode = "llm_ai"
+                    ai = LLM_AI2048(game)
+                    print("LLM AI模式")
+
 
         # AI模式下的移动
-        if ai_mode and game.get_game_state() == GAME_RUNNING and ai:
+        if game_mode != "human" and game.get_game_state() == GAME_RUNNING and ai:
             # 限制AI移动频率
             if current_time - last_ai_move_time > ai_delay:
                 try:
@@ -249,10 +272,16 @@ def run():
                 except Exception as e:
                     print(f"服务器繁忙 请稍后再试 {e}")
                     # 如果AI崩溃，重置AI
-                    ai = AI2048(game)
+                    if game_mode == "greedy_ai":
+                        ai = Greedy_AI2048(game)
+                    elif game_mode == "mcts_ai":
+                        ai = MCTS_AI2048(game)
+                    else:
+                        ai = LLM_AI2048(game)
+
 
         if game.get_game_state() == GAME_WON and (current_time - game.win_time >= 2000):
-            game.game_state = GAME_RUNNING  # 恢复运行，赢了继续玩
+            game.game_state = GAME_RUNNING  # 恢复运行
 
         # 渲染
         renderer.render(game)

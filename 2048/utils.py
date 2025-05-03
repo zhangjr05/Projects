@@ -198,15 +198,15 @@ for value in TILE_COLORS.keys():
 import os
 import json
 
-def get_records_path():
+def get_path(file_name):
     """获取records.json文件的路径"""
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(current_dir, "records.json")
+    return os.path.join(current_dir, file_name)
 
 def load_highscores():
     """读取历史最高分"""
     try:
-        records_path = get_records_path()
+        records_path = get_path("records.json")
         if os.path.exists(records_path):
             with open(records_path, "r") as f:
                 try:
@@ -232,7 +232,7 @@ def save_score(score):
         
         scores = sorted(scores, reverse=True)[:10]  # 只保留前10个最高分
         
-        records_path = get_records_path()
+        records_path = get_path("records.json")
         with open(records_path, "w") as f:
             json.dump({"scores": scores}, f)
     except Exception as e:

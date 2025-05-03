@@ -2,7 +2,7 @@ import copy
 import random
 from utils import *
 
-class AI2048:
+class Greedy_AI2048:
     """
     2048游戏的AI类定义 使用贪婪搜索策略
     """
@@ -19,7 +19,7 @@ class AI2048:
         best_move, _ = self._look_ahead(self.game, depth)   # 最佳选择
 
         if best_move is None:
-            best_move = random.randint(0, 3)    # 没有就摆烂！
+            best_move = random.randint(0, 3)
         return best_move
     
     def _look_ahead(self, game, depth):
@@ -57,6 +57,7 @@ class AI2048:
                     
         return best_move, best_score
 
+
     def _evaluate(self, game):
         """
         贪婪策略评估函数
@@ -69,7 +70,7 @@ class AI2048:
         empty_cells_count = len(empty_cells)
         
         # 空格数量权重
-        empty_weight = 16 if max_tile < 128 else 32 if max_tile < 256 else 64 if max_tile < 512 else 128 # 后期空格更重要
+        empty_weight = 32 if max_tile < 512 else 128 if max_tile == 512 else 512 if max_tile == 1024 else 2048 # 后期空格更重要
         total_score += empty_cells_count * empty_weight
 
         # 空白格分布评分
@@ -91,12 +92,13 @@ class AI2048:
                             queue.append((ni, nj))
                             visited.add((ni, nj)) 
                 if cluster_size > max_cluster:
-                    max_cluster = cluster_size # 更新最大集群大小
-            total_score += max_cluster * max_tile / 4
+                    max_cluster = cluster_size  # 更新最大集群大小
+            total_score += max_cluster * max_tile
         
+
         # 合并潜力与权重
         merge_potential = 0
-        merge_weight = 1 if max_tile < 256 else 1.2 if max_tile < 1024 else 1.5
+        merge_weight = 1 if max_tile < 256 else 2 if max_tile < 1024 else 3
         # 水平方向合并潜力
         for i in range(4):
             for j in range(3):
@@ -111,6 +113,7 @@ class AI2048:
                     # 直接相邻相同
                     if grid[i][j] == grid[i + 1][j]:
                         merge_potential += grid[i][j] * 2
+
         total_score += merge_potential * merge_weight
         
         # 多模板蛇形布局评分 下为多种潜在的最优路径模板
@@ -163,13 +166,13 @@ class AI2048:
                 
                 # 如果保持全局单调性，给予额外奖励
                 if monotonic and values[0] > 0:
-                    path_score *= 1.5
+                    path_score *= 2
                 
                 if path_score > best_snake_score:
                     best_snake_score = path_score 
         
         # 动态调整蛇形路径权重
-        snake_weight = 1.8 if max_tile >= 512 else 1.2 # 后期单调性更重要
+        snake_weight = 2 if max_tile >= 512 else 1 # 后期单调性更重要
         total_score += best_snake_score * snake_weight
         
         # 角落策略评分
@@ -181,30 +184,30 @@ class AI2048:
         if max_tile in corner_values:
             corner_idx = corner_values.index(max_tile)
             corner_pos = corners[corner_idx]
-            corner_score += max_tile * 2
+            corner_score += max_tile * 4
             
             # 在最大值周围构建递减序列
             if corner_pos == (0, 0):  # 左上角
                 # 检查右侧和下方的数值梯度
                 if grid[0][1] != 0 and grid[0][0] >= grid[0][1]:
-                    corner_score += grid[0][1] * 0.8
+                    corner_score += grid[0][1]
                 if grid[1][0] != 0 and grid[0][0] >= grid[1][0]:
-                    corner_score += grid[1][0] * 0.8
+                    corner_score += grid[1][0]
             elif corner_pos == (0, 3):  # 右上角
                 if grid[0][2] != 0 and grid[0][3] >= grid[0][2]:
-                    corner_score += grid[0][2] * 0.8
+                    corner_score += grid[0][2]
                 if grid[1][3] != 0 and grid[0][3] >= grid[1][3]:
-                    corner_score += grid[1][3] * 0.8
+                    corner_score += grid[1][3]
             elif corner_pos == (3, 0):  # 左下角
                 if grid[2][0] != 0 and grid[3][0] >= grid[2][0]:
-                    corner_score += grid[2][0] * 0.8
+                    corner_score += grid[2][0]
                 if grid[3][1] != 0 and grid[3][0] >= grid[3][1]:
-                    corner_score += grid[3][1] * 0.8
+                    corner_score += grid[3][1]
             elif corner_pos == (3, 3):  # 右下角
                 if grid[2][3] != 0 and grid[3][3] >= grid[2][3]:
-                    corner_score += grid[2][3] * 0.8
+                    corner_score += grid[2][3]
                 if grid[3][2] != 0 and grid[3][3] >= grid[3][2]:
-                    corner_score += grid[3][2] * 0.8
+                    corner_score += grid[3][2]
         
         # 检查次大数在边缘
         second_max = 0
@@ -217,7 +220,7 @@ class AI2048:
         edge_positions = [(0, 1), (0, 2), (1, 0), (1, 3), (2, 0), (2, 3), (3, 1), (3, 2)]
         for i, j in edge_positions:
             if grid[i][j] == second_max:
-                corner_score += second_max * 0.5
+                corner_score += second_max
         
         total_score += corner_score
         
@@ -237,12 +240,12 @@ class AI2048:
                         smoothness -= diff
         
         # 动态调整平滑度权重
-        smoothness_weight = 1.5 if max_tile <= 256 else 3 # 后期平滑度更重要
+        smoothness_weight = 2 if max_tile <= 256 else 4 # 后期平滑度更重要
         total_score += smoothness * smoothness_weight
         
         # 危险格局惩罚
         danger_score = 0
-        
+
         # 惩罚大数在中央的情形
         center_positions = [(1, 1), (1, 2), (2, 1), (2, 2)]
         for i, j in center_positions:
@@ -257,8 +260,8 @@ class AI2048:
         # 游戏状态加成
         game_state = game.get_game_state()
         if game_state == 1:  # 游戏胜利
-            total_score = float('inf')  # 成功了疯狂奖励
+            total_score = float('inf')
         elif game_state == 2:  # 游戏失败
-            total_score = -float('inf')  # 失败了疯狂惩罚
+            total_score = -float('inf')
         
         return total_score

@@ -9,7 +9,7 @@ from utils import get_path
 
 
 def test_ai_performance(ai_class=Greedy_AI2048, ai_name="Greedy", num_games=10, max_moves=10000, **kwargs):
-    """测试AI性能"""
+    """测试AI性能并返回结果"""
     scores = []
     max_tiles = []
     moves_count = []
@@ -49,14 +49,18 @@ def test_ai_performance(ai_class=Greedy_AI2048, ai_name="Greedy", num_games=10, 
         "average_time_to_2048": float(np.mean([game_durations[i] for i in range(num_games) if max_tiles[i] >= 2048])) if any(max_tile >= 2048 for max_tile in max_tiles) else 0,
     }
 
-
     results = {
         "ai_name": ai_name,
         "scores": scores,
         "max_tiles": max_tiles,
         "moves_count": moves_count,
         "game_durations": game_durations,
-        "stats": stats
+        "stats": stats,
+        "test_params": {
+            "num_games": num_games,
+            "max_moves": max_moves,
+            **kwargs
+        }
     }
 
     # 打印统计信息
@@ -66,8 +70,48 @@ def test_ai_performance(ai_class=Greedy_AI2048, ai_name="Greedy", num_games=10, 
     
     return results
 
-def visualize_results(results):
-    """可视化测试结果"""
+
+def test_greedy_ai(num_games=200, max_moves=10000, save_path=None):
+    """测试贪婪AI并可选保存结果"""
+    print("\nTesting Greedy AI...")
+    greedy_results = test_ai_performance(
+        ai_class=Greedy_AI2048, 
+        ai_name="Greedy",
+        num_games=num_games, 
+        max_moves=max_moves
+    )
+    
+    # 如果提供保存路径，则保存结果
+    if save_path:
+        with open(save_path, 'w') as f:
+            json.dump(greedy_results, f, indent=4)
+        print(f"Results saved to {save_path}")
+    
+    return greedy_results
+
+
+def test_mcts_ai(num_games=200, max_moves=10000, simulation_time=0.5, save_path=None):
+    """测试MCTS AI并可选保存结果"""
+    print("\nTesting MCTS AI...")
+    mcts_results = test_ai_performance(
+        ai_class=MCTS_AI2048, 
+        ai_name="MCTS",
+        num_games=num_games,
+        max_moves=max_moves,
+        simulation_time=simulation_time
+    )
+    
+    # 如果提供保存路径，则保存结果
+    if save_path:
+        with open(save_path, 'w') as f:
+            json.dump(mcts_results, f, indent=4)
+        print(f"Results saved to {save_path}")
+    
+    return mcts_results
+
+
+def visualize_results(results, show=True):
+    """可视化单个AI的测试结果"""
     # 获取AI名称
     ai_name = results.get("ai_name", "Unknown")
     
@@ -101,11 +145,29 @@ def visualize_results(results):
     plt.ylabel("Frequency")
 
     plt.tight_layout()
-    plt.show()
+    
+    if show:
+        plt.show()
+    
+    return plt
 
 
-def compare_ai_results(greedy_results, mcts_results):
+def compare_ai_results(greedy_results=None, mcts_results=None, greedy_path=None, mcts_path=None, save_path=None, show=True):
     """比较两种AI的结果并创建对比图表"""
+    # 如果提供了文件路径，从文件加载结果
+    if greedy_path and not greedy_results:
+        with open(greedy_path, 'r') as f:
+            greedy_results = json.load(f)
+    
+    if mcts_path and not mcts_results:
+        with open(mcts_path, 'r') as f:
+            mcts_results = json.load(f)
+    
+    # 确保我们有两种AI的结果
+    if not greedy_results or not mcts_results:
+        print("Error: Need results for both Greedy and MCTS AI to compare")
+        return None
+    
     plt.figure(figsize=(15, 10))
     
     # 比较平均分数
@@ -150,51 +212,6 @@ def compare_ai_results(greedy_results, mcts_results):
     plt.ylabel("Success Rate")
     
     plt.tight_layout()
-    plt.show()
-
-
-if __name__ == "__main__":
-    # 设置测试参数
-    num_games = 10
-    max_moves = 10000
-    
-    # 测试贪婪搜索AI
-    print("\nTesting Greedy AI...")
-    greedy_results = test_ai_performance(
-        ai_class=Greedy_AI2048, 
-        ai_name="Greedy",
-        num_games=num_games, 
-        max_moves=max_moves
-    )
-    # visualize_results(greedy_results)
-    
-    # 测试MCTS AI
-    print("\nTesting MCTS AI...")
-    mcts_results = test_ai_performance(
-        ai_class=MCTS_AI2048, 
-        ai_name="MCTS",
-        num_games=num_games,
-        max_moves=max_moves,
-        simulation_time=0.5  # MCTS特定参数
-    )
-    # visualize_results(mcts_results)
-    
-    # 合并结果并保存到同一个JSON文件
-    combined_results = {
-        "greedy": greedy_results,
-        "mcts": mcts_results,
-        "test_params": {
-            "num_games": num_games,
-            "max_moves": max_moves,
-            "mcts_simulation_time": 0.5
-        }
-    }
-
-    with open(get_path("test_results.json"), 'w') as f:
-        json.dump(combined_results, f, indent=4)
-    
-    # 可视化比较结果
-    compare_ai_results(greedy_results, mcts_results)
     
     # 打印简单比较
     print("\n===== AI Performance Comparison =====")
@@ -204,3 +221,64 @@ if __name__ == "__main__":
     print(f"MCTS average max tile: {mcts_results['stats']['average_max_tile']}")
     print(f"Greedy success rate (2048): {greedy_results['stats']['success_rate_2048']}%")
     print(f"MCTS success rate (2048): {mcts_results['stats']['success_rate_2048']}%")
+    
+    # 如果提供保存路径，保存比较数据
+    if save_path:
+        comparison_data = {
+            "greedy": {
+                "average_score": greedy_results["stats"]["average_score"],
+                "highest_score": greedy_results["stats"]["highest_score"],
+                "average_max_tile": greedy_results["stats"]["average_max_tile"],
+                "highest_max_tile": greedy_results["stats"]["highest_max_tile"],
+                "success_rate_2048": greedy_results["stats"]["success_rate_2048"]
+            },
+            "mcts": {
+                "average_score": mcts_results["stats"]["average_score"],
+                "highest_score": mcts_results["stats"]["highest_score"],
+                "average_max_tile": mcts_results["stats"]["average_max_tile"],
+                "highest_max_tile": mcts_results["stats"]["highest_max_tile"],
+                "success_rate_2048": mcts_results["stats"]["success_rate_2048"]
+            },
+            "test_params": {
+                "greedy": greedy_results.get("test_params", {}),
+                "mcts": mcts_results.get("test_params", {})
+            }
+        }
+        
+        with open(save_path, 'w') as f:
+            json.dump(comparison_data, f, indent=4)
+        print(f"Comparison data saved to {save_path}")
+    
+    if show:
+        plt.show()
+    
+    return plt
+
+
+if __name__ == "__main__":
+    # 设置测试参数
+    num_games = 100
+    max_moves = 10000
+    simulation_time = 0.5
+    
+    # # 测试贪婪AI
+    # greedy_results = test_greedy_ai(
+    #     num_games=num_games, 
+    #     max_moves=max_moves, 
+    #     save_path=get_path("greedy_results.json")
+    # )
+    
+    # # 测试MCTS AI
+    # mcts_results = test_mcts_ai(
+    #     num_games=num_games, 
+    #     max_moves=max_moves, 
+    #     simulation_time=simulation_time, 
+    #     save_path=get_path("mcts_results.json")
+    # )
+    
+    # 比较结果
+    compare_ai_results(
+        greedy_path=get_path("greedy_results.json"), 
+        mcts_path=get_path("mcts_results.json"), 
+        save_path=get_path("comparison_results.json")
+    )

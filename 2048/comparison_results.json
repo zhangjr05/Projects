@@ -1,0 +1,27 @@
+{
+    "greedy": {
+        "average_score": 16195.36,
+        "highest_score": 22136,
+        "average_max_tile": 1359.36,
+        "highest_max_tile": 2048,
+        "success_rate_2048": 38.0
+    },
+    "mcts": {
+        "average_score": 12491.52,
+        "highest_score": 21196,
+        "average_max_tile": 1011.2,
+        "highest_max_tile": 2048,
+        "success_rate_2048": 10.0
+    },
+    "test_params": {
+        "greedy": {
+            "num_games": 100,
+            "max_moves": 10000
+        },
+        "mcts": {
+            "num_games": 100,
+            "max_moves": 10000,
+            "simulation_time": 0.5
+        }
+    }
+}

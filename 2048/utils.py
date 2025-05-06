@@ -197,7 +197,7 @@ import os
 import json
 
 def get_path(file_name):
-    """获取records.json文件的路径"""
+    """获取文件路径"""
     current_dir = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(current_dir, file_name)
 

@@ -6,6 +6,7 @@ from renderer import GameRenderer
 from Greedy_ai import Greedy_AI2048
 from MCTS_ai import MCTS_AI2048
 from LLM import LLM_AI2048
+from ML_ai import ML_Enhanced_AI2048
 
 
 class Game2048:
@@ -198,7 +199,7 @@ def run():
     # 设置游戏时钟
     clock = pygame.time.Clock()
 
-    # 游戏模式: "human", "greedy_ai", "mcts_ai"
+    # 游戏模式: "human", "greedy_ai", "mcts_ai", "llm_ai", "ml_ai"
     game_mode = "human"
     ai_delay = AI_DELAY
     last_ai_move_time = 0
@@ -233,8 +234,12 @@ def run():
                     if game_mode != "human":
                         if game_mode == "greedy_ai":
                             ai = Greedy_AI2048(game)
-                        else:  # mcts_ai
+                        elif game_mode == "mcts_ai":
                             ai = MCTS_AI2048(game)
+                        elif game_mode == "llm_ai":
+                            ai = LLM_AI2048(game)
+                        elif game_mode == "ml_ai":
+                            ai = ML_Enhanced_AI2048(game)
 
                 # H键切换到人类模式
                 if event.key == pygame.K_h and game_mode != "human":
@@ -242,11 +247,11 @@ def run():
                     ai = None
                     print("人类模式")
                 
-                # A键切换到贪婪AI模式
-                elif event.key == pygame.K_a and game_mode != "greedy_ai":
+                # G键切换到贪婪AI模式
+                elif event.key == pygame.K_g and game_mode != "greedy_ai":
                     game_mode = "greedy_ai"
                     ai = Greedy_AI2048(game)
-                    print("贪婪AI模式")
+                    print("贪婪 AI模式")
                 
                 # M键切换到MCTS模式
                 elif event.key == pygame.K_m and game_mode != "mcts_ai":
@@ -259,6 +264,16 @@ def run():
                     game_mode = "llm_ai"
                     ai = LLM_AI2048(game)
                     print("LLM AI模式")
+                
+                # A键切换到ML增强AI模式
+                elif event.key == pygame.K_a and game_mode != "ml_ai":
+                    game_mode = "ml_ai"
+                    ai = ML_Enhanced_AI2048(game)
+                    # 检查模型是否需要训练
+                    if not hasattr(ai.model, 'classes_'):
+                        print("训练ML模型中...")
+                        ai.train_model(num_games=10, max_moves=500)  # 使用小参数快速训练
+                    print("ML增强 AI模式")
 
 
         # AI模式下的移动
@@ -276,8 +291,10 @@ def run():
                         ai = Greedy_AI2048(game)
                     elif game_mode == "mcts_ai":
                         ai = MCTS_AI2048(game)
-                    else:
+                    elif game_mode == "llm_ai":
                         ai = LLM_AI2048(game)
+                    elif game_mode == "ml_ai":
+                        ai = ML_Enhanced_AI2048(game)
 
 
         if game.get_game_state() == GAME_WON and (current_time - game.win_time >= 2000):
@@ -293,3 +310,7 @@ def run():
     save_score(game.get_score())
     pygame.quit()
     sys.exit()
+
+if __name__ == "__main__":
+    # 运行游戏
+    run()

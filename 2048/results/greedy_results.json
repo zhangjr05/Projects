@@ -1,0 +1,44 @@
+{
+    "ai_name": "Greedy",
+    "scores": [
+        20144,
+        15784,
+        16600,
+        20224,
+        20684
+    ],
+    "max_tiles": [
+        2048,
+        1024,
+        1024,
+        2048,
+        2048
+    ],
+    "moves_count": [
+        938,
+        917,
+        986,
+        947,
+        998
+    ],
+    "game_durations": [
+        200.18856382369995,
+        359.2908248901367,
+        365.8345522880554,
+        381.8565649986267,
+        381.1852171421051
+    ],
+    "stats": {
+        "average_score": 18687.2,
+        "highest_score": 20684,
+        "average_max_tile": 1638.4,
+        "highest_max_tile": 2048,
+        "average_moves": 957.2,
+        "success_rate_2048": 60.0,
+        "average_time_to_2048": 321.0767819881439
+    },
+    "test_params": {
+        "num_games": 5,
+        "max_moves": 2000
+    }
+}

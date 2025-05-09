@@ -6,9 +6,12 @@ import json
 import gradio as gr
 import re
 
+
+GLOBAL_API_KEY = 'sk-11742ea4a8cc421e949e05c049d86e51'
+
+
 try:
     from dashscope import Generation, save_api_key
-    GLOBAL_API_KEY = 'your_api_key'
     save_api_key(GLOBAL_API_KEY)
     Generation.api_key = GLOBAL_API_KEY
     os.environ["DASHSCOPE_API_KEY"] = GLOBAL_API_KEY

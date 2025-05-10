@@ -8,7 +8,10 @@ from Greedy_ai import Greedy_AI2048
 from MCTS_ai import MCTS_AI2048
 from ML_ai import ML_Enhanced_AI2048
 from utils import get_path
-from tqdm import tqdm  # 添加tqdm导入
+from tqdm import tqdm
+
+plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'SimSun']
+plt.rcParams['axes.unicode_minus'] = False
 
 
 def test_ai_performance(ai_class=Greedy_AI2048, ai_name="Greedy", num_games=10, max_moves=10000, **kwargs):
@@ -348,9 +351,7 @@ def compare_ai_results(greedy_results=None, mcts_results=None, ml_results=None,
         print(f"比较数据已保存到 {save_path}")
     
     # 保存图表
-    results_dir = os.path.join(os.path.dirname(get_path()), "results")
-    os.makedirs(results_dir, exist_ok=True)
-    plt.savefig(os.path.join(results_dir, "ai_comparison.png"))
+    plt.savefig(get_path(r"results\ai_comparison.png"))
     
     if show:
         plt.show()
@@ -366,29 +367,29 @@ if __name__ == "__main__":
     
     # 测试所有AI类型
 
-    greedy_results = test_greedy_ai(
-        num_games=num_games, 
-        max_moves=max_moves, 
-        save_path=get_path("results/greedy_results.json")
-    )
+    # greedy_results = test_greedy_ai(
+    #     num_games=num_games, 
+    #     max_moves=max_moves, 
+    #     save_path=get_path("results/greedy_results.json")
+    # )
     
-    mcts_results = test_mcts_ai(
-        num_games=num_games, 
-        max_moves=max_moves, 
-        simulation_time=simulation_time, 
-        save_path=get_path("results/mcts_results.json")
-    )
+    # mcts_results = test_mcts_ai(
+    #     num_games=num_games, 
+    #     max_moves=max_moves, 
+    #     simulation_time=simulation_time, 
+    #     save_path=get_path("results/mcts_results.json")
+    # )
 
-    ml_results = test_ml_ai(
-        num_games=num_games,
-        max_moves=max_moves,
-        save_path=get_path("results/ml_results.json")
-    )
+    # ml_results = test_ml_ai(
+    #     num_games=num_games,
+    #     max_moves=max_moves,
+    #     save_path=get_path("results/ml_results.json")
+    # )
     
     # 比较所有AI类型的结果
-    # compare_ai_results(
-    #     greedy_path=get_path("results/greedy_results.json"),
-    #     mcts_path=get_path("results/mcts_results.json"),
-    #     ml_path=get_path("results/mcts_results.json"),
-    #     save_path=get_path("results/ai_comparison.json")
-    # )
+    compare_ai_results(
+        greedy_path=get_path("results/greedy_results.json"),
+        mcts_path=get_path("results/mcts_results.json"),
+        ml_path=get_path("results/ml_results.json"),
+        save_path=get_path("results/ai_comparison.json")
+    )

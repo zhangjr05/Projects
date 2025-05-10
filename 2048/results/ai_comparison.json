@@ -1,27 +1,30 @@
 {
-    "greedy": {
-        "average_score": 16195.36,
-        "highest_score": 22136,
-        "average_max_tile": 1359.36,
-        "highest_max_tile": 2048,
-        "success_rate_2048": 38.0
-    },
-    "mcts": {
-        "average_score": 12491.52,
-        "highest_score": 21196,
-        "average_max_tile": 1011.2,
-        "highest_max_tile": 2048,
-        "success_rate_2048": 10.0
-    },
-    "test_params": {
+    "ai_types": [
+        "\u8d2a\u5a6a",
+        "MCTS",
+        "ML\u589e\u5f3a"
+    ],
+    "comparison": {
         "greedy": {
-            "num_games": 100,
-            "max_moves": 10000
+            "average_score": 18687.2,
+            "highest_score": 20684,
+            "average_max_tile": 1638.4,
+            "highest_max_tile": 2048,
+            "success_rate_2048": 60.0
         },
         "mcts": {
-            "num_games": 100,
-            "max_moves": 10000,
-            "simulation_time": 0.5
+            "average_score": 11418.4,
+            "highest_score": 21280,
+            "average_max_tile": 921.6,
+            "highest_max_tile": 2048,
+            "success_rate_2048": 20.0
+        },
+        "ml_enhanced": {
+            "average_score": 17139.2,
+            "highest_score": 20796,
+            "average_max_tile": 1433.6,
+            "highest_max_tile": 2048,
+            "success_rate_2048": 40.0
         }
     }
 }

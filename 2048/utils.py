@@ -1,3 +1,8 @@
+import os
+import json
+import copy
+import random
+
 # 定义游戏常量
 GRID_SIZE = 4  # 游戏网格大小 4x4
 CELL_SIZE = 100  # 每个格子的像素大小
@@ -172,8 +177,8 @@ THEMES = {
     },
 }
 
-# 当前主题
-CURRENT_THEME = "classic"
+# 随机选择一个主题
+CURRENT_THEME = random.choice(list(THEMES.keys()))
 
 # 背景和空格子颜色直接使用主题中的定义
 BACKGROUND_COLOR = THEMES[CURRENT_THEME]["background"]
@@ -192,14 +197,13 @@ for value in TILE_COLORS.keys():
         TEXT_COLORS[value] = THEMES[CURRENT_THEME]["text_dark"]
 
 
-# 获取历史记录
-import os
-import json
+# 功能函数
 
 def get_path(file_name):
     """获取文件路径"""
     current_dir = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(current_dir, file_name)
+
 
 def load_highscores():
     """读取历史最高分"""
@@ -218,6 +222,7 @@ def load_highscores():
         print(f"读取分数记录时出错: {e}")
         return [0]
     
+
 def save_score(score):
     """保存新的分数记录"""
     if score <= 0:
@@ -225,13 +230,19 @@ def save_score(score):
         
     try:
         scores = load_highscores()
-        if score not in scores:  # 避免重复分数
-            scores.append(score)
-        
-        scores = sorted(scores, reverse=True)[:10]  # 只保留前10个最高分
+        scores.append(score)
+        scores = sorted(scores, reverse=True)
         
         records_path = get_path("records.json")
         with open(records_path, "w") as f:
-            json.dump({"scores": scores}, f)
+            json.dump({"scores": scores}, f, indent=4)
+
     except Exception as e:
         print(f"保存分数记录时出错: {e}")
+
+
+def fast_copy_game(game):
+    """轻量级游戏复制函数，避免完整深拷贝"""
+    new_game = copy.copy(game)  # 浅拷贝对象
+    new_game.grid = [row[:] for row in game.grid]  # 仅深拷贝网格数据
+    return new_game

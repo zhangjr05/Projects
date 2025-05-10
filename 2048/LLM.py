@@ -1,14 +1,13 @@
 import copy
 import time
-from Greedy_ai import Greedy_AI2048
 import os
 import json
 import gradio as gr
 import re
+from Greedy_ai import Greedy_AI2048
 
-
+# 使用环境变量安全存储API密钥
 GLOBAL_API_KEY = 'sk-11742ea4a8cc421e949e05c049d86e51'
-
 
 try:
     from dashscope import Generation, save_api_key
@@ -21,6 +20,7 @@ except ImportError as e:
     LLM_AVAILABLE = False
 
 def ensure_api_key():
+    """确保API密钥已设置"""
     try:
         from dashscope import Generation
         if not Generation.api_key:
@@ -30,6 +30,8 @@ def ensure_api_key():
         return False
 
 class LLM_AI2048(Greedy_AI2048):
+    """使用LLM增强的2048 AI"""
+    
     def __init__(self, game=None, model="qwen-max", api_key=None):
         super().__init__(game)
         self.model = model
@@ -40,7 +42,7 @@ class LLM_AI2048(Greedy_AI2048):
         self.cache_hits = 0
         self.total_calls = 0
         
-        # 简化提示模板，减少token数量
+        # 优化的LLM提示模板
         self.prompt_template = """
 你是2048游戏AI专家。分析游戏状态并给出最佳移动方向。
 
@@ -53,22 +55,28 @@ class LLM_AI2048(Greedy_AI2048):
 - 下(2) 
 - 左(3)
 
-请考虑:
-1. 保持最大数字在角落
-2. 维持递减序列
-3. 保持足够空白格子
-4. 优先合并大数字
+2048游戏最佳策略:
+1. 始终保持最大数字固定在一个角落(优先左下角)
+2. 沿着主对角线或边缘维持严格的降序排列
+3. 保持足够空白格子以应对随机新块
+4. 维持"蛇形路径"结构(例如: 从左下16-8-4-2沿Z字形排列)
+5. 避免将大数字分散在棋盘上
+6. 合并方向应该始终指向最大数字所在的角落
 
-简要分析各方向优缺点，最后给出最佳方向(0-3)。
+分析每个有效方向的移动结果:
+1. 这个移动是否保持最大数字在角落?
+2. 这个移动是否维持单调递减序列?
+3. 这个移动后是否有足够的空白格子?
+4. 这个移动是否创造了合并机会?
 
-最终决策(仅需数字0-3): 
+给出你的决策过程，最后用一行给出选择的方向(只需数字0-3):
 """
         # API密钥设置
         if api_key:
             self._set_api_key(api_key)
 
     def _set_api_key(self, api_key):
-        """单独处理API密钥设置"""
+        """设置API密钥"""
         try:
             from dashscope import Generation, save_api_key
             save_api_key(api_key)
@@ -86,7 +94,7 @@ class LLM_AI2048(Greedy_AI2048):
         
         self.total_calls += 1
         
-        # 检查特殊条件
+        # LLM不可用时使用贪婪算法
         if self.failed_calls >= 3:
             self.use_llm = False
         
@@ -96,91 +104,99 @@ class LLM_AI2048(Greedy_AI2048):
             self.cache_hits += 1
             return self.decision_cache[grid_tuple]
         
-        # 紧急情况或LLM不可用时使用评估函数
-        if not self.use_llm or self._is_emergency_situation():
+        # 紧急情况或LLM不可用时使用贪婪算法
+        if not self.use_llm:
             return self._fallback_to_greedy()
         
-        # 使用LLM做决策
-        return self._get_move_from_llm(grid_tuple)
-    
-    def _is_emergency_situation(self):
-        """检查是否为紧急情况（空格很少或需要快速响应）"""
-        grid = self.game.get_grid()
-        empty_count = sum(cell == 0 for row in grid for cell in row)
-        return empty_count <= 2  # 空格少于等于2个视为紧急
-    
+        # 动态选择决策策略
+        max_tile = max(max(row) for row in self.game.get_grid())
+        empty_count = sum(cell == 0 for row in self.game.get_grid() for cell in row)
+        
+        # 早期/晚期阶段使用贪婪算法
+        if max_tile < 64 or empty_count <= 3 or self.failed_calls >= 2:
+            return self._fallback_to_greedy()
+        
+        # 中期使用LLM
+        try:
+            return self._get_move_from_llm(grid_tuple)
+        except Exception as e:
+            self.failed_calls += 1
+            print(f"LLM调用错误: {str(e)[:100]}...")
+            return self._fallback_to_greedy()
+
     def _fallback_to_greedy(self):
         """回退到贪婪算法"""
-        direction = self._get_best_move_by_evaluation()
+        # 直接使用父类的方法
+        direction = super().get_move()
         
+        # 记录决策
         self.move_history.append({
-            "state": self._format_game_state_compact(),
-            "response": "使用评估函数决策" + ("" if self.use_llm else "(LLM已禁用)"),
+            "state": self._format_game_state(),
+            "response": "使用贪婪搜索算法决策" + 
+                      ("" if self.use_llm else "(LLM已禁用)"),
             "direction": direction,
             "time": time.time()
         })
         
+        # 缓存决策
+        grid_tuple = tuple(map(tuple, self.game.get_grid()))
+        self.decision_cache[grid_tuple] = direction
+        
         return direction
-    
+
     def _get_move_from_llm(self, grid_tuple):
         """从LLM获取移动方向"""
-        try:
-            ensure_api_key()
-            start_time = time.time()
-            
-            # 使用更紧凑的游戏状态描述减少token数量
-            game_state_text = self._format_game_state_compact()
-            prompt = self.prompt_template.format(game_state_text)
-            
-            response = Generation.call(
-                model=self.model,
-                prompt=prompt,
-                result_format='message',
-                max_tokens=600,  # 减少token上限以加快响应
-                temperature=0.2  # 降低温度提高确定性
-            )
-            
-            content = response.output.choices[0]['message']['content']
-            
-            # 解析响应获取方向
-            direction = self._parse_llm_response(content)
-            
-            # 验证方向的有效性
-            if not self._is_valid_move(direction):
-                # 如果LLM给出无效移动，使用贪婪算法
-                direction = self._get_best_move_by_evaluation()
-                content += "\n[无效移动，使用评估函数替代]"
-            
-            # 记录决策
-            process_time = time.time() - start_time
-            self.move_history.append({
-                "state": game_state_text,
-                "response": content,
-                "direction": direction,
-                "time": time.time(),
-                "process_time": process_time
-            })
-            
-            # 缓存决策
-            self.decision_cache[grid_tuple] = direction
-            self.failed_calls = 0
-            
-            return direction
-            
-        except Exception as e:
-            self.failed_calls += 1
-            if self.failed_calls == 1:
-                print(f"LLM调用错误: {str(e)[:100]}...")
-            
-            return self._fallback_to_greedy()
-    
+        ensure_api_key()
+        start_time = time.time()
+        
+        # 准备游戏状态描述
+        game_state_text = self._format_game_state()
+        prompt = self.prompt_template.format(game_state_text)
+        
+        # 调用LLM API
+        response = Generation.call(
+            model=self.model,
+            prompt=prompt,
+            result_format='message',
+            max_tokens=300,
+            temperature=0.1
+        )
+        
+        content = response.output.choices[0]['message']['content']
+        direction = self._parse_llm_response(content)
+        
+        # 验证方向有效性
+        if direction not in [0, 1, 2, 3] or not self._is_valid_move(direction):
+            old_direction = direction
+            direction = super().get_move()  # 使用父类方法
+            content += f"\n[无效移动 {old_direction}，已替换为有效移动 {direction}]"
+        
+        # 记录决策
+        process_time = time.time() - start_time
+        self.move_history.append({
+            "state": game_state_text,
+            "response": content,
+            "direction": direction,
+            "time": time.time(),
+            "process_time": process_time
+        })
+        
+        # 缓存决策
+        self.decision_cache[grid_tuple] = direction
+        self.failed_calls = 0
+        
+        return direction
+
     def _is_valid_move(self, direction):
         """检查移动是否有效"""
+        if direction not in [0, 1, 2, 3]:
+            return False
+            
         game_copy = copy.deepcopy(self.game)
         return game_copy.move(direction)
     
-    def _format_game_state_compact(self):
-        """生成更紧凑的游戏状态描述"""
+    def _format_game_state(self):
+        """格式化游戏状态"""
         grid = self.game.get_grid()
         score = self.game.get_score()
         
@@ -192,9 +208,6 @@ class LLM_AI2048(Greedy_AI2048):
         empty_count = sum(cell == 0 for row in grid for cell in row)
         max_tile = max(max(row) for row in grid)
         
-        # 计算可合并的方块对
-        mergeable_pairs = self._count_mergeable_pairs()
-        
         # 添加有效移动方向
         valid_moves = []
         for direction in range(4):
@@ -204,46 +217,34 @@ class LLM_AI2048(Greedy_AI2048):
                 valid_moves.append(f"{direction}({direction_name})")
         
         state_text = f"{grid_text}\n"
-        state_text += f"分数:{score} 空格:{empty_count} 最大值:{max_tile} 可合并对:{mergeable_pairs}\n"
+        state_text += f"分数:{score} 空格:{empty_count} 最大值:{max_tile}\n"
         state_text += f"有效移动: {', '.join(valid_moves)}\n"
         
         return state_text
-    
-    def _count_mergeable_pairs(self):
-        """计算可合并的方块对数量"""
-        grid = self.game.get_grid()
-        count = 0
-        
-        # 水平检查
-        for i in range(4):
-            for j in range(3):
-                if grid[i][j] != 0 and grid[i][j] == grid[i][j+1]:
-                    count += 1
-        
-        # 垂直检查
-        for j in range(4):
-            for i in range(3):
-                if grid[i][j] != 0 and grid[i][j] == grid[i+1][j]:
-                    count += 1
-                    
-        return count
-    
+
     def _parse_llm_response(self, response_text):
-        """从LLM响应中提取移动方向"""
-        # 优先查找最后出现的单个数字
-        pattern = r'(?:方向|决策|移动|选择)\D*?([0-3])[^0-9]*$'
-        match = re.search(pattern, response_text, re.DOTALL)
-        if match:
-            return int(match.group(1))
+        """解析LLM响应获取方向"""
+        # 查找数字方向
+        patterns = [
+            r'最终(?:选择|决策|方向)[^\d]*?([0-3])',
+            r'(?:选择|决策|方向)[是为]?\s*?([0-3])',
+            r'(?:方向|决策|移动|选择)\D*?([0-3])[^0-9]*$',
+            r'([0-3])\s*$'  # 最后一行只有一个数字
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, response_text, re.DOTALL)
+            if match:
+                return int(match.group(1))
             
-        # 查找最后一行包含的数字
+        # 查找最后一行数字
         lines = response_text.strip().split('\n')
         for line in reversed(lines):
             for num in ["0", "1", "2", "3"]:
-                if num in line and not re.search(r'\d+\.\d+', line):  # 避免匹配小数
+                if num in line and not re.search(r'\d+\.\d+', line):
                     return int(num)
         
-        # 通过方向名称映射
+        # 查找方向名称
         direction_words = {
             "上": 0, "up": 0, "向上": 0, 
             "右": 1, "right": 1, "向右": 1,
@@ -257,24 +258,7 @@ class LLM_AI2048(Greedy_AI2048):
         
         # 默认返回左移
         return 3
-    
-    def _get_best_move_by_evaluation(self):
-        """使用评估函数选择最佳移动"""
-        valid_moves = []
-        scores = []
-        
-        for direction in range(4):
-            game_copy = copy.deepcopy(self.game)
-            if game_copy.move(direction):
-                valid_moves.append(direction)
-                scores.append(super()._evaluate(game_copy))
-        
-        if not valid_moves:
-            return 0
-        
-        best_idx = scores.index(max(scores))
-        return valid_moves[best_idx]
-    
+
     def get_stats(self):
         """获取统计信息"""
         return {
@@ -295,7 +279,6 @@ class LLM_AI2048(Greedy_AI2048):
             filename = f"llm_decisions_{int(time.time())}.json"
         
         try:
-            # 添加统计信息
             history_with_stats = {
                 "stats": self.get_stats(),
                 "decisions": self.move_history
@@ -311,8 +294,8 @@ class LLM_AI2048(Greedy_AI2048):
 
 
 def create_gradio_interface():
+    """创建Gradio界面"""
     ensure_api_key()
-    
     from game import Game2048
     
     global_state = {
@@ -325,6 +308,7 @@ def create_gradio_interface():
     }
     
     def initialize_game():
+        """初始化游戏"""
         global_state["game"] = Game2048()
         global_state["ai"] = LLM_AI2048(
             game=global_state["game"]
@@ -336,6 +320,7 @@ def create_gradio_interface():
         return format_grid(global_state["game"].get_grid()), "游戏已初始化，当前分数: 0", ""
     
     def format_grid(grid):
+        """格式化游戏网格为HTML"""
         html = """
         <style>
         .game-container {
@@ -394,27 +379,28 @@ def create_gradio_interface():
         return html
     
     def format_thoughts(thoughts):
+        """格式化AI思考过程"""
         if not thoughts:
             return ""
         
-        md = f"## 移动 #{global_state['move_count']}\n\n"
+        move_number = global_state["move_count"]
         
-        # 添加移动方向和时间信息
+        md = f"## 移动 #{move_number}\n\n"
+        
         direction_names = ['上', '右', '下', '左']
         direction = thoughts.get('direction', 0)
         md += f"**方向:** {direction_names[direction]} (代码:{direction})\n\n"
-        
-        # 添加处理时间信息（如果有）
+
         if 'process_time' in thoughts:
             md += f"**处理时间:** {thoughts['process_time']:.3f}秒\n\n"
-        
-        # 显示LLM分析或评估函数信息
+
         md += "**分析:**\n\n"
         md += f"```\n{thoughts['response']}\n```"
         
         return md
     
     def make_move():
+        """执行一步移动"""
         if global_state["game"] is None:
             initialize_game()
         
@@ -425,7 +411,9 @@ def create_gradio_interface():
         direction = global_state["ai"].get_move()
         decision_time = time.time() - start_time
         
+        # 修复：执行实际移动
         moved = global_state["game"].move(direction)
+        
         global_state["move_count"] += 1
         global_state["game_history"].append(copy.deepcopy(global_state["game"].get_grid()))
         global_state["last_update_time"] = time.time()
@@ -433,25 +421,28 @@ def create_gradio_interface():
         thoughts = None
         if global_state["ai"].move_history and len(global_state["ai"].move_history) > 0:
             thoughts = global_state["ai"].move_history[-1]
-            # 添加决策时间信息
             if 'process_time' not in thoughts:
                 thoughts['process_time'] = decision_time
         
         thoughts_md = format_thoughts(thoughts)
         
+        max_tile = max(max(row) for row in global_state["game"].get_grid())
         status = global_state["game"].get_game_state()
         status_text = "进行中"
-        if status == 1:
+        
+        # 修复：当达到2048也算成功
+        if status == 1 or max_tile >= 2048:
             status_text = "胜利！"
         elif status == 2:
             status_text = "失败"
         
-        # 添加LLM/贪婪信息
-        method = "LLM" if "LLM" not in (thoughts.get('response', "") if thoughts else "") else "贪婪"
+        # 判断使用LLM还是贪婪算法
+        method = "贪婪" if thoughts and "使用贪婪" in thoughts.get('response', "") else "LLM"
         
         return format_grid(global_state["game"].get_grid()), f"移动 #{global_state['move_count']}: {'上右下左'[direction]} ({method})，分数={global_state['game'].get_score()}，状态={status_text}", thoughts_md
     
     def auto_play():
+        """自动运行游戏"""
         global_state["running"] = True
         
         if global_state["game"] is None:
@@ -460,27 +451,28 @@ def create_gradio_interface():
         result = format_grid(global_state["game"].get_grid()), f"自动游戏开始，分数: {global_state['game'].get_score()}", ""
         yield result
         
-        # 改进刷新机制：基于时间和步数的自适应刷新
-        update_frequency = 3  # 每隔多少步更新一次UI
+        update_frequency = 3  # 每3步更新一次UI
         min_update_interval = 0.5  # 最小更新间隔(秒)
         steps_since_update = 0
         
-        while global_state["running"] and global_state["game"] and global_state["game"].get_game_state() == 0:
+        while global_state["running"] and global_state["game"]:
+            # 检查游戏是否结束
+            max_tile = max(max(row) for row in global_state["game"].get_grid())
+            if global_state["game"].get_game_state() != 0 or max_tile >= 2048:
+                break
+                
             grid_html, status, thoughts_md = make_move()
             steps_since_update += 1
             
             current_time = time.time()
             time_since_last_update = current_time - global_state["last_update_time"]
             
-            # 满足以下任一条件时更新UI：
-            # 1. 已执行足够多步骤
-            # 2. 距离上次更新已经过去足够长时间
             if steps_since_update >= update_frequency or time_since_last_update >= min_update_interval:
                 global_state["last_update_time"] = current_time
                 steps_since_update = 0
                 yield grid_html, status, thoughts_md
             
-            # 动态延迟：空格越少，延迟越短（更快响应紧急情况）
+            # 动态延迟
             grid = global_state["game"].get_grid()
             empty_count = sum(cell == 0 for row in grid for cell in row)
             delay = 0.01 if empty_count <= 3 else 0.05
@@ -490,9 +482,14 @@ def create_gradio_interface():
         stats = global_state["ai"].get_stats() if global_state["ai"] else {}
         llm_ratio = f"LLM使用率: {1 - stats.get('cache_hit_ratio', 0):.1%}" if stats else ""
         
-        return format_grid(global_state["game"].get_grid()), f"游戏结束，最终分数: {final_score}，共{global_state['move_count']}步 {llm_ratio}", ""
+        # 判断游戏结果
+        max_tile = max(max(row) for row in global_state["game"].get_grid())
+        result_text = "胜利！" if max_tile >= 2048 else "失败" if global_state["game"].get_game_state() == 2 else "游戏结束"
+        
+        return format_grid(global_state["game"].get_grid()), f"{result_text}，最终分数: {final_score}，共{global_state['move_count']}步 {llm_ratio}", ""
     
     def stop_auto_play():
+        """停止自动运行"""
         global_state["running"] = False
         
         if global_state["game"] is None:
@@ -504,6 +501,7 @@ def create_gradio_interface():
         return format_grid(global_state["game"].get_grid()), f"自动游戏已停止，分数: {global_state['game'].get_score()}{cache_info}", ""
     
     def save_results():
+        """保存游戏结果"""
         if global_state["game"] is None:
             return "游戏未初始化"
         
@@ -515,6 +513,7 @@ def create_gradio_interface():
         return "AI未初始化，无法保存历史"
     
     def set_api_key(key):
+        """设置API密钥"""
         try:
             global GLOBAL_API_KEY
             from dashscope import Generation, save_api_key
@@ -523,7 +522,7 @@ def create_gradio_interface():
             os.environ["DASHSCOPE_API_KEY"] = key
             GLOBAL_API_KEY = key
             
-            # 重置AI以使用新密钥
+            # 重置AI
             if global_state["ai"]:
                 global_state["ai"]._set_api_key(key)
                 global_state["ai"].use_llm = True
@@ -533,6 +532,7 @@ def create_gradio_interface():
         except Exception as e:
             return f"API密钥设置失败: {str(e)}"
     
+    # 创建Gradio界面
     with gr.Blocks(title="LLM玩2048") as demo:
         gr.Markdown("# 🤖 通义千问玩2048")
         gr.Markdown("使用大语言模型来玩2048游戏")
@@ -574,7 +574,9 @@ def create_gradio_interface():
     
     return demo
 
+
 def create_llm_ai(game, api_key=None):
+    """创建LLM AI实例"""
     if api_key:
         try:
             from dashscope import save_api_key, Generation
@@ -586,6 +588,7 @@ def create_llm_ai(game, api_key=None):
     
     ai = LLM_AI2048(game)
     return ai
+
 
 if __name__ == "__main__":
     ensure_api_key()

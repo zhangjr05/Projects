@@ -1,9 +1,9 @@
-from utils import *
-from Greedy_ai import Greedy_AI2048
-import copy
 import time
 import random
 import numpy as np
+from utils import *
+from Greedy_ai import Greedy_AI2048
+
 
 class MCTSNode:
     def __init__(self, game, parent=None, move=None):
@@ -18,13 +18,13 @@ class MCTSNode:
     def _get_untried_moves(self):
         valid_moves = []
         for direction in range(4):
-            game_copy = copy.deepcopy(self.game)
+            game_copy = fast_copy_game(self.game)
             if game_copy.move(direction):
                 valid_moves.append(direction)
         return valid_moves
     
     def add_child(self, move):
-        game_copy = copy.deepcopy(self.game)
+        game_copy = fast_copy_game(self.game)
         game_copy.move(move)
         child = MCTSNode(game_copy, self, move)
         self.untried_moves.remove(move)
@@ -65,8 +65,110 @@ class MCTS_AI2048(Greedy_AI2048):
         super().__init__(game)
         self.simulation_time = simulation_time
         self.stats = {"simulations": 0, "greedy_used": 0, "mcts_used": 0}
-        self.node_cache = {}
+        self.prev_root = None  # 存储前一步的搜索树
+        self.prev_move = None  # 记录上一步选择的移动
+        self.tree_reuse_count = 0  # 统计树复用次数
     
+
+    def _can_move_in_direction(self, grid, direction):
+        """检查指定方向是否可移动"""
+        if direction == 0:  # 上
+            for j in range(4):
+                for i in range(1, 4):
+                    if grid[i][j] != 0 and (grid[i-1][j] == 0 or grid[i-1][j] == grid[i][j]):
+                        return True
+        elif direction == 1:  # 右
+            for i in range(4):
+                for j in range(3):
+                    if grid[i][j] != 0 and (grid[i][j+1] == 0 or grid[i][j+1] == grid[i][j]):
+                        return True
+        elif direction == 2:  # 下
+            for j in range(4):
+                for i in range(3):
+                    if grid[i][j] != 0 and (grid[i+1][j] == 0 or grid[i+1][j] == grid[i][j]):
+                        return True
+        elif direction == 3:  # 左
+            for i in range(4):
+                for j in range(1, 4):
+                    if grid[i][j] != 0 and (grid[i][j-1] == 0 or grid[i][j-1] == grid[i][j]):
+                        return True
+        return False
+    
+
+    def _get_valid_moves(self, game):
+        """获取所有有效移动方向"""
+        valid_moves = []
+        grid = game.grid
+        
+        for direction in range(4):
+            if self._can_move_in_direction(grid, direction):
+                game_copy = fast_copy_game(game)
+                if game_copy.move(direction):
+                    valid_moves.append(direction)
+        
+        return valid_moves
+    
+
+    def _get_game_state_stats(self, game):
+        """获取游戏状态的统计信息"""
+        return {
+            'score': game.get_score(),
+            'max_tile': max(max(row) for row in game.get_grid()),
+            'empty_count': sum(row.count(0) for row in game.get_grid()),
+            'eval': self._evaluate(game)
+        }
+    
+
+    def _is_same_state(self, game1, game2):
+        """检查两个游戏状态是否相似"""
+        score1, score2 = game1.get_score(), game2.get_score()
+        if abs(score1 - score2) > max(score1, score2) * 0.05:
+            return False
+
+        grid1 = game1.get_grid()
+        grid2 = game2.get_grid()
+        
+        # 主要方块匹配策略
+        match_count = 0
+        important_count = 0
+        max_value = max(max(row) for row in grid1)
+        
+        # 动态确定重要方块的阈值 - 值越大的方块越重要
+        threshold = max(8, max_value // 16)
+        
+        for i in range(4):
+            for j in range(4):
+                # 完全匹配大方块
+                if grid1[i][j] >= threshold:
+                    important_count += 1
+                    if grid1[i][j] == grid2[i][j]:
+                        match_count += 1
+                    else:
+                        # 大方块不匹配直接返回False
+                        return False
+                # 中等方块允许少量不匹配
+                elif grid1[i][j] >= threshold // 2:
+                    if grid1[i][j] != grid2[i][j]:
+                        # 允许最多2个中等方块不匹配
+                        if important_count >= 2:
+                            return False
+                        important_count += 1
+        
+        # 检查空格数量是否接近
+        empty1 = sum(row.count(0) for row in grid1)
+        empty2 = sum(row.count(0) for row in grid2)
+        
+        # 空格数相差不超过1格
+        if abs(empty1 - empty2) > 1:
+            return False
+        
+        if important_count == 0:
+            match_cells = sum(grid1[i][j] == grid2[i][j] for i in range(4) for j in range(4))
+            return match_cells >= 13
+        
+        return True
+
+
     def get_move(self):
         if not self.game:
             return random.randint(0, 3)
@@ -77,7 +179,7 @@ class MCTS_AI2048(Greedy_AI2048):
         
         if greedy_move is None:
             for direction in range(4):
-                game_copy = copy.deepcopy(self.game)
+                game_copy = fast_copy_game(self.game)
                 if game_copy.move(direction):
                     greedy_move = direction
                     break
@@ -86,33 +188,48 @@ class MCTS_AI2048(Greedy_AI2048):
                 greedy_move = random.randint(0, 3)
         
         # MCTS搜索
-        root = MCTSNode(self.game)
-        
+        root = None
+        if self.prev_root and self.prev_move is not None:
+            # 查找前一步选择的移动对应的子节点
+            if self.prev_move in self.prev_root.children:
+                child_node = self.prev_root.children[self.prev_move]
+                if child_node and self._is_same_state(child_node.game, self.game):
+                    root = child_node
+                    root.parent = None  # 断开与旧树的连接
+                    self.tree_reuse_count += 1
+                    self.stats["tree_reuse"] = self.tree_reuse_count
+        if root is None:
+            root = MCTSNode(self.game)
+
         if len(root.untried_moves) <= 1:
             self.stats["greedy_used"] += 1
             return greedy_move
         
         mcts_move = self._mcts_search(root)
+
+        # 保存当前的搜索树和选择的移动，供下一步使用
+        self.prev_root = root
+        self.prev_move = mcts_move
         
         # 比较两种移动
-        greedy_game = copy.deepcopy(self.game)
+        greedy_game = fast_copy_game(self.game)
         greedy_game.move(greedy_move)
-        greedy_score = self._enhanced_evaluate(greedy_game)
+        greedy_score = self._evaluate(greedy_game)
         
-        mcts_game = copy.deepcopy(self.game)
+        mcts_game = fast_copy_game(self.game)
         mcts_game.move(mcts_move)
-        mcts_score = self._enhanced_evaluate(mcts_game)
+        mcts_score = self._evaluate(mcts_game)
         
         # 动态阈值：基于最大方块和空格数
         max_tile = max(max(row) for row in self.game.get_grid())
         empty_count = sum(row.count(0) for row in self.game.get_grid())
         
-        if max_tile >= 512 and empty_count <= 5:
-            threshold = 0.88  # 高分值紧张局面更信任MCTS
-        elif max_tile >= 256:
-            threshold = 0.93
-        else:
-            threshold = 0.97  # 早期更信任贪婪
+        threshold = 0.6 if max_tile >= 1024 else 0.7 if max_tile >= 256 else 0.8
+
+        if empty_count < 4:
+            threshold += 0.05
+        if self.stats["simulations"] > 600:
+            threshold -= 0.05
 
         # 决策逻辑
         if mcts_score >= greedy_score * threshold:
@@ -122,6 +239,7 @@ class MCTS_AI2048(Greedy_AI2048):
             self.stats["greedy_used"] += 1
             return greedy_move
     
+
     def _mcts_search(self, root):
         start_time = time.time()
         iteration = 0
@@ -155,6 +273,7 @@ class MCTS_AI2048(Greedy_AI2048):
         
         return best_move
     
+
     def _select(self, node):
         current = node
         
@@ -175,6 +294,7 @@ class MCTS_AI2048(Greedy_AI2048):
         
         return current
     
+
     def _expand(self, node):
         if not node.untried_moves:
             return node
@@ -183,9 +303,9 @@ class MCTS_AI2048(Greedy_AI2048):
         best_moves = []
         
         for move in node.untried_moves:
-            game_copy = copy.deepcopy(node.game)
+            game_copy = fast_copy_game(node.game)
             if game_copy.move(move):
-                score = self._enhanced_evaluate(game_copy)
+                score = self._evaluate(game_copy)
                 
                 if score > best_score:
                     best_score = score
@@ -196,78 +316,33 @@ class MCTS_AI2048(Greedy_AI2048):
         expand_move = random.choice(best_moves) if best_moves else random.choice(node.untried_moves)
         return node.add_child(expand_move)
     
+
     def _simulate(self, node):
-        game = copy.deepcopy(node.game)
+        game = fast_copy_game(node.game)
         
-        # 保存初始状态
-        initial_state = {
-            'score': game.get_score(),
-            'max_tile': max(max(row) for row in game.get_grid()),
-            'empty_count': sum(row.count(0) for row in game.get_grid()),
-            'eval': self._enhanced_evaluate(game)
-        }
+        initial_state = self._get_game_state_stats(game)
         
         # 动态调整模拟深度
         max_tile = initial_state['max_tile']
         if max_tile >= 512:
-            depth = 12  # 高分状态增加深度
+            depth = 16
+            random_factor = 0.03
         elif max_tile >= 128:
-            depth = 10  # 中等状态
+            depth = 12
+            random_factor = 0.06
         else:
-            depth = 8   # 早期状态增加深度
+            depth = 8
+            random_factor = 0.12
         
         steps = 0
         
         while game.get_game_state() == 0 and steps < depth:
-            valid_moves = []
-            for direction in range(4):
-                # 高效检测可移动性
-                can_move = False
-                grid = game.grid
-                
-                if direction == 0:  # 上
-                    for j in range(4):
-                        for i in range(1, 4):
-                            if grid[i][j] != 0 and (grid[i-1][j] == 0 or grid[i-1][j] == grid[i][j]):
-                                can_move = True
-                                break
-                        if can_move: break
-                elif direction == 1:  # 右
-                    for i in range(4):
-                        for j in range(3):
-                            if grid[i][j] != 0 and (grid[i][j+1] == 0 or grid[i][j+1] == grid[i][j]):
-                                can_move = True
-                                break
-                        if can_move: break
-                elif direction == 2:  # 下
-                    for j in range(4):
-                        for i in range(3):
-                            if grid[i][j] != 0 and (grid[i+1][j] == 0 or grid[i+1][j] == grid[i][j]):
-                                can_move = True
-                                break
-                        if can_move: break
-                elif direction == 3:  # 左
-                    for i in range(4):
-                        for j in range(1, 4):
-                            if grid[i][j] != 0 and (grid[i][j-1] == 0 or grid[i][j-1] == grid[i][j]):
-                                can_move = True
-                                break
-                        if can_move: break
-                
-                # 只有确认可移动时才创建深拷贝
-                if can_move:
-                    game_copy = copy.deepcopy(game)
-                    if game_copy.move(direction):
-                        valid_moves.append(direction)
+            valid_moves = self._get_valid_moves(game)
             
             if not valid_moves:
                 break
             
-            # 降低随机性，增加策略性
-            if random.random() < 0.15:  # 从0.3降低到0.15
-                best_move = random.choice(valid_moves)
-            else:
-                best_move = self._enhanced_evaluate_moves(game, valid_moves)
+            best_move = random.choice(valid_moves) if random.random() < random_factor else self._evaluate_moves(game, valid_moves)
             
             game.move(best_move)
             
@@ -280,15 +355,9 @@ class MCTS_AI2048(Greedy_AI2048):
             steps += 1
             
             # 提前终止检查 - 如果评估严重下降，提前结束模拟
-            if steps >= 4 and self._enhanced_evaluate(game) < initial_state['eval'] * 0.75:
-                break
+            if steps >= 4 and self._evaluate(game) < initial_state['eval'] * 0.75: break
         
-        final_state = {
-            'score': game.get_score(),
-            'max_tile': max(max(row) for row in game.get_grid()),
-            'empty_count': sum(row.count(0) for row in game.get_grid()),
-            'eval': self._enhanced_evaluate(game)
-        }
+        final_state = self._get_game_state_stats(game)
         
         # 计算复合奖励
         score_gain = (final_state['score'] - initial_state['score']) / 1000
@@ -296,125 +365,26 @@ class MCTS_AI2048(Greedy_AI2048):
         empty_diff = final_state['empty_count'] - initial_state['empty_count']
         eval_diff = final_state['eval'] - initial_state['eval']
         
-        reward = (
-            0.5 * eval_diff +  # 提高评估函数权重
-            0.25 * score_gain + 
-            0.15 * tile_gain + 
-            0.1 * empty_diff
-        )
+        reward = (0.5 * eval_diff + 0.25 * score_gain + 0.15 * tile_gain + 0.1 * empty_diff)
         
         # 游戏状态奖励
-        if game.get_game_state() == 1:  # 胜利
-            reward += 100
-        elif game.get_game_state() == 2:  # 失败
-            reward -= 30
+        if game.get_game_state() == 1:
+            reward *= 10
+        elif game.get_game_state() == 2:
+            reward /= 10
         
         return reward
     
-    def _enhanced_evaluate(self, game):
-        """
-        增强版评估函数，从贪婪AI中借鉴高效评估方法
-        """
-        grid = game.get_grid()
-        score = 0
-        
-        # 空格评估
-        empty_count = sum(row.count(0) for row in grid)
-        score += empty_count * 10
-        
-        # 最大方块评估
-        max_tile = max(max(row) for row in grid)
-        
-        # 最大方块位置评估
-        corners = [(0,0), (0,3), (3,0), (3,3)]
-        max_in_corner = False
-        for i, j in corners:
-            if grid[i][j] == max_tile:
-                max_in_corner = True
-                score += max_tile * 0.5  # 奖励最大方块在角落
-                break
-        
-        # 单调性评估（保持方块沿一个方向递减）
-        monotonicity = 0
-        
-        # 检查水平单调性
-        for i in range(4):
-            current_row = grid[i]
-            if current_row[0] >= current_row[1] >= current_row[2] >= current_row[3]:
-                monotonicity += 1
-            if current_row[3] >= current_row[2] >= current_row[1] >= current_row[0]:
-                monotonicity += 1
-        
-        # 检查垂直单调性
-        for j in range(4):
-            current_col = [grid[i][j] for i in range(4)]
-            if current_col[0] >= current_col[1] >= current_col[2] >= current_col[3]:
-                monotonicity += 1
-            if current_col[3] >= current_col[2] >= current_col[1] >= current_col[0]:
-                monotonicity += 1
-        
-        score += monotonicity * 20
-        
-        # 平滑度评估（相邻方块数值接近）
-        smoothness = 0
-        for i in range(4):
-            for j in range(4):
-                if grid[i][j] == 0:
-                    continue
-                
-                val = np.log2(grid[i][j])
-                for ni, nj in [(i+1, j), (i, j+1)]:
-                    if 0 <= ni < 4 and 0 <= nj < 4 and grid[ni][nj] != 0:
-                        n_val = np.log2(grid[ni][nj])
-                        smoothness -= abs(val - n_val)
-        
-        score += smoothness * 5
-        
-        # 合并潜力评估
-        merge_potential = 0
-        for i in range(4):
-            for j in range(3):
-                if grid[i][j] != 0 and grid[i][j] == grid[i][j+1]:
-                    merge_potential += grid[i][j]
-        for j in range(4):
-            for i in range(3):
-                if grid[i][j] != 0 and grid[i][j] == grid[i+1][j]:
-                    merge_potential += grid[i][j]
-        
-        score += merge_potential
-        
-        # 蛇形路径检查（理想的方块排列结构）
-        snake_path = [
-            (0,0), (0,1), (0,2), (0,3),
-            (1,3), (1,2), (1,1), (1,0),
-            (2,0), (2,1), (2,2), (2,3),
-            (3,3), (3,2), (3,1), (3,0)
-        ]
-        
-        values = []
-        for i, j in snake_path:
-            values.append(grid[i][j])
-        
-        is_snake = True
-        for i in range(len(values) - 1):
-            if values[i] < values[i+1] and values[i] != 0:
-                is_snake = False
-                break
-        
-        if is_snake:
-            score += 50
-        
-        return score
-    
-    def _enhanced_evaluate_moves(self, game, valid_moves):
+
+    def _evaluate_moves(self, game, valid_moves):
         """评估多个移动并选择最佳的"""
         best_score = float('-inf')
-        best_move = random.choice(valid_moves)  # 默认值
+        best_move = random.choice(valid_moves)
         
         for move in valid_moves:
-            game_copy = copy.deepcopy(game)
+            game_copy = fast_copy_game(game)
             game_copy.move(move)
-            score = self._enhanced_evaluate(game_copy)
+            score = self._evaluate(game_copy)
             
             if score > best_score:
                 best_score = score
@@ -422,15 +392,18 @@ class MCTS_AI2048(Greedy_AI2048):
         
         return best_move
     
+
     def _backpropagate(self, node, reward):
         current = node
         
         while current:
             current.update(reward)
             current = current.parent
-    
+
+
     def _is_terminal(self, game):
         return game.get_game_state() != 0
     
+
     def get_stats(self):
         return self.stats

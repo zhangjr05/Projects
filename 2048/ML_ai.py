@@ -429,8 +429,8 @@ class ML_Enhanced_AI2048(Greedy_AI2048):
                 max_tile = max(max(row) for row in game.get_grid())
                 pbar.set_description(f"游戏 {i+1}/{num_games} 完成 - 最大值: {max_tile}")
             
-            # 检查是否达到2048
-            reached_2048 = any(max(max(row) for row in state.get_grid()) >= 2048 for state in states)
+            final_max_tile = max(max(row) for row in game.get_grid())
+            reached_2048 = final_max_tile >= 2048
             
             # 处理完整游戏状态(保留决策路径)
             with tqdm(total=len(states), desc="处理游戏状态", leave=False) as pbar:

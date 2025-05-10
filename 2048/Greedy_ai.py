@@ -3,11 +3,8 @@ import random
 from utils import *
 
 class Greedy_AI2048:
-    """
-    2048游戏的AI类定义 使用贪婪搜索策略
-    """
+    """贪婪搜索AI"""
     def __init__(self, game=None):
-        # 继承当前的game
         self.game = game
     
     def get_move(self) -> int:

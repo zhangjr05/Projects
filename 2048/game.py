@@ -272,7 +272,7 @@ def run():
                     # 检查模型是否需要训练
                     if not hasattr(ai.model, 'classes_'):
                         print("训练ML模型中...")
-                        ai.train_model(num_games=10, max_moves=500)  # 使用小参数快速训练
+                        ai.train_model(num_games=10, max_moves=1000)  # 使用小参数快速训练
                     print("ML增强 AI模式")
 
 

@@ -13,6 +13,7 @@ from utils import *
 class ML_Enhanced_AI2048(Greedy_AI2048):
     """结合机器学习方法和贪婪策略的2048 AI"""
     def __init__(self, game=None, model_path=None):
+        """初始化ML增强AI实例，加载模型和设置统计信息。"""
         super().__init__(game)
         self.model = None
         self.scaler = None
@@ -30,6 +31,7 @@ class ML_Enhanced_AI2048(Greedy_AI2048):
         self.decision_cache = {}
         
     def load_or_create_model(self):
+        """加载现有模型或创建新的随机森林模型"""
         try:
             with open(self.model_path, 'rb') as f:
                 model_data = pickle.load(f)
@@ -50,6 +52,7 @@ class ML_Enhanced_AI2048(Greedy_AI2048):
             self.scaler = StandardScaler()
     
     def save_model(self):
+        """保存训练好的模型到指定路径"""
         model_dir = os.path.dirname(self.model_path)
         os.makedirs(model_dir, exist_ok=True)
         
@@ -58,7 +61,7 @@ class ML_Enhanced_AI2048(Greedy_AI2048):
         print(f"模型已保存至 {self.model_path}")
     
     def extract_features(self, game):
-        """特征提取"""
+        """从当前游戏状态提取特征，用于模型预测"""
         grid = game.get_grid()
         flat_grid = [cell for row in grid for cell in row]
         
@@ -175,6 +178,7 @@ class ML_Enhanced_AI2048(Greedy_AI2048):
         return np.array(features).reshape(1, -1)
     
     def predict_probability(self, game):
+        """预测当前状态下达到2048的概率"""
         grid_tuple = tuple(tuple(row) for row in game.get_grid())
         if grid_tuple in self.decision_cache and not isinstance(self.decision_cache[grid_tuple], tuple):
             return self.decision_cache[grid_tuple]
@@ -229,6 +233,7 @@ class ML_Enhanced_AI2048(Greedy_AI2048):
             return probability
     
     def _heuristic_probability(self, game):
+        """基于启发式规则计算达到2048的概率"""
         grid = game.get_grid()
         max_tile = max(max(row) for row in grid)
         empty_count = sum(row.count(0) for row in grid)
@@ -255,106 +260,81 @@ class ML_Enhanced_AI2048(Greedy_AI2048):
         return max(0.0, min(1.0, final_probability))
     
     def get_move(self):
+        """根据ML增强策略和贪婪策略选择下一步移动"""
         if not self.game:
             return None
-        
-        grid_tuple = tuple(tuple(row) for row in self.game.get_grid())
+
+        grid = self.game.get_grid()
+        max_tile = max(max(row) for row in grid)
+        grid_tuple = tuple(tuple(row) for row in grid)
         if grid_tuple in self.decision_cache and isinstance(self.decision_cache[grid_tuple], tuple):
             return self.decision_cache[grid_tuple][0]
-        
-        # 获取贪婪策略的建议移动
+
         greedy_move = super().get_move()
-        
-        # 获取当前状态达到2048的概率
         base_probability = self.predict_probability(self.game)
-        
-        # 根据概率动态调整搜索深度
-        if base_probability > 0.7:
-            depth = 4
+
+        if max_tile >= 1024:
+            depth = 1
+        elif max_tile >= 512:
+            depth = 2
+        elif base_probability > 0.7:
+            depth = 3
             self.stats["high_probability_paths"] += 1
         elif base_probability < 0.3:
             depth = 2
             self.stats["low_probability_paths"] += 1
         else:
             depth = 3
-        
-        # ML增强搜索
-        ml_move, ml_score = self._ml_enhanced_look_ahead(self.game, depth, base_probability)
-        
-        # 如果ML没有找到有效移动，使用贪婪移动
-        if ml_move is None:
-            self.stats["greedy_decisions"] += 1
+
+        if max_tile >= 512:
             best_move = greedy_move
+            self.stats["greedy_decisions"] += 1
         else:
-            # 比较ML和贪婪策略
-            greedy_game = copy.deepcopy(self.game)
-            greedy_game.move(greedy_move)
-            greedy_score = self._evaluate(greedy_game)
-            
-            # 根据局面情况动态调整ML信任度
-            max_tile = max(max(row) for row in self.game.get_grid())
-            
-            if max_tile >= 512:
-                ml_threshold = 0.85  # 高分局面更信任ML
-            else:
-                ml_threshold = 0.95  # 低分局面更谨慎
-                
-            # 比较ML得分与贪婪得分
-            if ml_score >= greedy_score * ml_threshold:
-                best_move = ml_move
-                self.stats["ml_decisions"] += 1
-            else:
+            ml_move, ml_score = self._ml_enhanced_look_ahead(self.game, depth, base_probability)
+            if ml_move is None:
                 best_move = greedy_move
                 self.stats["greedy_decisions"] += 1
-        
-        # 缓存决策
+            else:
+                greedy_game = copy.deepcopy(self.game)
+                greedy_game.move(greedy_move)
+                greedy_score = self._evaluate(greedy_game)
+
+                ml_threshold = 0.9 if max_tile >= 256 else 0.8
+                if ml_score >= greedy_score * ml_threshold:
+                    best_move = ml_move
+                    self.stats["ml_decisions"] += 1
+                else:
+                    best_move = greedy_move
+                    self.stats["greedy_decisions"] += 1
+
         self.decision_cache[grid_tuple] = (best_move, base_probability)
         return best_move
-    
+
     def _ml_enhanced_look_ahead(self, game, depth, base_probability):
+        """优化采样数，避免高分爆炸"""
         if depth == 0:
             eval_score = self._evaluate(game)
             probability = self.predict_probability(game)
-            
-            # 增强ML因子影响力
             ml_factor = 1.0 + (probability - base_probability) * 2.5
             return None, eval_score * ml_factor
-        
+
         best_score = -float('inf')
         best_move = None
-        
-        directions = range(4)
-        if getattr(self, '_is_root_call', True) and depth > 3:
-            self._is_root_call = False
-            directions = tqdm(directions, desc="搜索移动方向", leave=False)
-        
-        for direction in directions:
+
+        for direction in range(4):
             game_copy = copy.deepcopy(game)
             if game_copy.move(direction):
                 if depth == 1:
                     eval_score = self._evaluate(game_copy)
                     probability = self.predict_probability(game_copy)
-                    
                     ml_factor = 1.0 + (probability - base_probability) * 2.5
                     move_score = eval_score * ml_factor
                 else:
-                    empty_cells = [(i, j) for i in range(GRID_SIZE) for j in range(GRID_SIZE) 
-                                 if game_copy.grid[i][j] == 0]
-                    
-                    if empty_cells:
-                        prob = self.predict_probability(game_copy)
-                        if prob > 0.8 and len(empty_cells) > 6:
-                            samples = 5  # 高概率状态多采样
-                        elif prob > 0.6:
-                            samples = 4
-                        elif prob > 0.4:
-                            samples = 3
-                        else:
-                            samples = 2  # 低概率状态少采样
-                        
-                        samples = min(samples, len(empty_cells))
+                    empty_cells = [(i, j) for i in range(GRID_SIZE) for j in range(GRID_SIZE) if game_copy.grid[i][j] == 0]
+                    # 限制采样数
+                    samples = min(2, len(empty_cells))
+                    if samples > 0:
                         sample_cells = random.sample(empty_cells, samples)
-                        
                         scores = []
                         for value, prob in [(TWO, 0.9), (FOUR, 0.1)]:
                             for cell in sample_cells:
@@ -362,22 +342,16 @@ class ML_Enhanced_AI2048(Greedy_AI2048):
                                 game_sim.grid[cell[0]][cell[1]] = value
                                 _, score = self._ml_enhanced_look_ahead(game_sim, depth - 1, base_probability)
                                 scores.append(score * prob)
-                        
                         move_score = sum(scores)
                     else:
                         move_score = self._evaluate(game_copy)
-                
                 if move_score > best_score:
                     best_score = move_score
                     best_move = direction
-        
-        if depth > 3:
-            self._is_root_call = True
-            
         return best_move, best_score
     
     def collect_training_data(self, num_games=500, max_moves=3000):
-        """收集训练数据"""
+        """通过模拟游戏收集训练数据"""
         from game import Game2048
         
         X = []
@@ -446,6 +420,7 @@ class ML_Enhanced_AI2048(Greedy_AI2048):
         return np.array(X), np.array(y)
     
     def train_model(self, X=None, y=None, num_games=500, max_moves=3000):
+        """训练随机森林模型并保存"""
         if X is None or y is None:
             print("收集训练数据中...")
             X, y = self.collect_training_data(num_games, max_moves)
@@ -527,11 +502,13 @@ class ML_Enhanced_AI2048(Greedy_AI2048):
         return True
     
     def get_stats(self):
+        """获取AI运行的统计信息"""
         return self.stats
 
 
 # 测试代码
 if __name__ == "__main__":
+    """测试ML增强AI的训练和游戏表现"""
     import time
     from game import Game2048
     
@@ -542,7 +519,7 @@ if __name__ == "__main__":
     # 训练模型
     if not hasattr(ai.model, 'classes_'):
         print("训练模型中...")
-        ai.train_model(num_games=500, max_moves=3000)
+        ai.train_model(num_games=50, max_moves=2000)
     
     # 运行测试游戏
     print("\n开始游戏测试...")

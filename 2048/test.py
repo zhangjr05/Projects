@@ -85,7 +85,7 @@ def test_ai_performance(ai_class=Greedy_AI2048, ai_name="Greedy", num_games=10, 
     return results
 
 
-def test_greedy_ai(num_games=100, max_moves=3000, save_path=None):
+def test_greedy_ai(num_games=100, max_moves=2000, save_path=None):
     """测试贪婪AI并可选保存结果"""
     print("\n开始测试贪婪AI...")
     greedy_results = test_ai_performance(
@@ -104,7 +104,7 @@ def test_greedy_ai(num_games=100, max_moves=3000, save_path=None):
     return greedy_results
 
 
-def test_mcts_ai(num_games=100, max_moves=3000, simulation_time=1.0, save_path=None):
+def test_mcts_ai(num_games=100, max_moves=2000, simulation_time=3.0, save_path=None):
     """测试MCTS AI并可选保存结果"""
     print("\n开始测试MCTS AI...")
     mcts_results = test_ai_performance(
@@ -124,7 +124,7 @@ def test_mcts_ai(num_games=100, max_moves=3000, simulation_time=1.0, save_path=N
     return mcts_results
 
 
-def test_ml_ai(num_games=100, max_moves=3000, save_path=None):
+def test_ml_ai(num_games=100, max_moves=2000, save_path=None):
     """测试ML增强AI并可选保存结果"""
     print("\n开始测试ML增强AI...")
     
@@ -377,11 +377,11 @@ if __name__ == "__main__":
     #     save_path=get_path("results/mcts_results.json")
     # )
 
-    ml_results = test_ml_ai(
-        num_games=num_games,
-        max_moves=max_moves,
-        save_path=get_path("results/ml_results.json")
-    )
+    # ml_results = test_ml_ai(
+    #     num_games=num_games,
+    #     max_moves=max_moves,
+    #     save_path=get_path("results/ml_results.json")
+    # )
     
 
     # 比较所有AI类型的结果

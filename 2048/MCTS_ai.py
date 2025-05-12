@@ -61,7 +61,7 @@ class MCTSNode:
 
 
 class MCTS_AI2048(Greedy_AI2048):
-    def __init__(self, game=None, simulation_time=1.0):
+    def __init__(self, game=None, simulation_time=3.0):
         super().__init__(game)
         self.simulation_time = simulation_time
         self.stats = {"simulations": 0, "greedy_used": 0, "mcts_used": 0}

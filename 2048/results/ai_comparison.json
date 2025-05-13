@@ -1,7 +1,8 @@
 {
     "ai_types": [
         "\u8d2a\u5a6a",
-        "MCTS"
+        "MCTS",
+        "ML\u589e\u5f3a"
     ],
     "comparison": {
         "greedy": {
@@ -12,11 +13,18 @@
             "success_rate_2048": 45.0
         },
         "mcts": {
-            "average_score": 18432.0,
-            "highest_score": 32768,
-            "average_max_tile": 1520.64,
+            "average_score": 14432.0,
+            "highest_score": 25768,
+            "average_max_tile": 1387.52,
             "highest_max_tile": 4096,
-            "success_rate_2048": 47.0
+            "success_rate_2048": 34.0
+        },
+        "ml_enhanced": {
+            "average_score": 18108.0,
+            "highest_score": 21216,
+            "average_max_tile": 1638.0,
+            "highest_max_tile": 2048,
+            "success_rate_2048": 60.0
         }
     }
 }

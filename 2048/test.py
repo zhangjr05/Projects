@@ -359,7 +359,7 @@ def compare_ai_results(greedy_results=None, mcts_results=None, ml_results=None,
 
 
 if __name__ == "__main__":
-    num_games = 100
+    num_games = 10
     max_moves = 2000
     
     
@@ -386,9 +386,9 @@ if __name__ == "__main__":
 
     # 比较所有AI类型的结果
 
-    # compare_ai_results(
-    #     greedy_path=get_path("results/greedy_results.json"),
-    #     mcts_path=get_path("results/mcts_results.json"),
-    #     ml_path=get_path("results/ml_results.json"),
-    #     save_path=get_path("results/ai_comparison.json")
-    # )
+    compare_ai_results(
+        greedy_path=get_path("results/greedy_results.json"),
+        mcts_path=get_path("results/mcts_results.json"),
+        ml_path=get_path("results/ml_results.json"),
+        save_path=get_path("results/ai_comparison.json")
+    )

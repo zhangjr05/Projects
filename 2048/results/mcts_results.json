@@ -409,12 +409,12 @@
         632.237895773827
     ],
     "stats": {
-        "average_score": 18432.0,
-        "highest_score": 32768,
-        "average_max_tile": 1520.64,
+        "average_score": 14432.0,
+        "highest_score": 25768,
+        "average_max_tile": 1387.52,
         "highest_max_tile": 4096,
-        "average_moves": 731.0,
-        "success_rate_2048": 47.0,
+        "average_moves": 771.0,
+        "success_rate_2048": 34.0,
         "average_time_to_2048": 727.09
     },
     "test_params": {

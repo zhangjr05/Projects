@@ -158,7 +158,7 @@ class LLM_AI2048(Greedy_AI2048):
             model=self.model,
             prompt=prompt,
             result_format='message',
-            max_tokens=300,
+            max_tokens=1000,
             temperature=0.1
         )
         

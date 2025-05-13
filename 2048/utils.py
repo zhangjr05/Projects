@@ -23,7 +23,7 @@ TWO = 2
 FOUR = 4
 
 # AI移动延迟 (ms)
-AI_DELAY = 80
+AI_DELAY = 0
 
 # 主题定义
 THEMES = {

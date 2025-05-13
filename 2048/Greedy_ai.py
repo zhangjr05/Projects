@@ -54,7 +54,6 @@ class Greedy_AI2048:
                     
         return best_move, best_score
 
-
     def _evaluate(self, game):
         """
         贪婪策略评估函数

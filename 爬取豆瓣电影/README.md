@@ -13,36 +13,42 @@
 
 - Python 3.6+
 - 依赖库：
-    - requests
-    - BeautifulSoup4
-    - re
-    - json
-    - time
-    - random
-    - os
-    - pymysql
+  - requests
+  - BeautifulSoup4
+  - re
+  - json
+  - time
+  - random
+  - os
+  - pymysql
 - 安装 mysql
 
 ## 使用方法
 
-1. 克隆或下载此项目到本地
-2. 安装所需依赖库：
-     ```
-     pip install requests beautifulsoup4 pymysql
-     ```
-3. 根据需要修改 `main.py` 中的配置：
-     - `MOVIE_RANGE` - 要爬取的电影(区间)
-     - `COMMENT_COUNT` - 每部电影要爬取的短评数
-     - `PASSWORD` - 你的 mysql 密码
-     - `HEADERS` - 请求头信息，随时更新 Cookie
-4. 运行main.py
-     ```
-     python main.py
-     ```
+1. **克隆或下载此项目到本地**
+
+2. **安装所需依赖库**
+
+    ```bash
+    pip install requests beautifulsoup4 pymysql
+    ```
+
+3. **根据需要修改 `main.py` 中的配置**
+   - `MOVIE_RANGE` - 要爬取的电影(区间)
+   - `COMMENT_COUNT` - 每部电影要爬取的短评数
+   - `PASSWORD` - 你的 mysql 密码
+   - `HEADERS` - 请求头信息，随时更新 Cookie
+
+4. 运行
+
+    ```bash
+    python main.py
+    ```
 
 ## 数据格式
 
 脚本爬取的 JSON 数据包含以下字段：
+
 - `no`: 电影排名
 - `name`: 电影名称
 - `rating`: 评分

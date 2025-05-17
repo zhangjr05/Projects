@@ -1,6 +1,6 @@
 # 2048游戏
 
-这是一个使用Python和Pygame实现的2048游戏，支持多种AI智能体和人工模式。
+这是一个使用Python和Pygame实现的2048游戏，支持多种AI智能体和人类模式。
 
 ## 游戏简介
 
@@ -54,13 +54,15 @@
 - `main.py`: 程序入口
 - `game.py`: 游戏核心逻辑
 - `utils.py`: 工具和常量
+- `renderer.py`: 图形渲染
 - `Greedy_ai.py`: 贪婪搜索AI实现
 - `MCTS_ai.py`: 蒙特卡洛树搜索实现
 - `ML_ai.py`: 机器学习增强AI实现
 - `LLM.py`: 基于大语言模型的AI实现
-- `renderer.py`: 图形渲染
-- `records.json`: 历史分数记录
 - `test.py`: AI性能测试脚本
+- `records.json`: 历史分数记录
+- `results`: 测试结果记录
+- `models`: 训练的ML模型
 
 ## AI算法比较
 

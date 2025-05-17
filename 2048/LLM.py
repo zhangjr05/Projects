@@ -5,9 +5,10 @@ import json
 import gradio as gr
 import re
 from Greedy_ai import Greedy_AI2048
+from utils import deep_sea_theme
 
 # 使用环境变量安全存储API密钥
-GLOBAL_API_KEY = 'sk-11742ea4a8cc421e949e05c049d86e51'
+GLOBAL_API_KEY = 'sk-33154f7f06c246188cddfa2622a04305'
 
 try:
     from dashscope import Generation, save_api_key
@@ -30,7 +31,7 @@ def ensure_api_key():
         return False
 
 class LLM_AI2048(Greedy_AI2048):
-    """使用LLM增强的2048 AI"""
+    """调用LLM进行决策的2048AI"""
     
     def __init__(self, game=None, model="qwen-max", api_key=None):
         super().__init__(game)
@@ -41,8 +42,7 @@ class LLM_AI2048(Greedy_AI2048):
         self.failed_calls = 0
         self.cache_hits = 0
         self.total_calls = 0
-        
-        # 优化的LLM提示模板
+
         self.prompt_template = """
 你是2048游戏AI专家。分析游戏状态并给出最佳移动方向。
 
@@ -75,6 +75,7 @@ class LLM_AI2048(Greedy_AI2048):
         if api_key:
             self._set_api_key(api_key)
 
+
     def _set_api_key(self, api_key):
         """设置API密钥"""
         try:
@@ -86,6 +87,7 @@ class LLM_AI2048(Greedy_AI2048):
             return True
         except Exception:
             return False
+
 
     def get_move(self):
         """获取下一步移动方向"""
@@ -112,8 +114,8 @@ class LLM_AI2048(Greedy_AI2048):
         max_tile = max(max(row) for row in self.game.get_grid())
         empty_count = sum(cell == 0 for row in self.game.get_grid() for cell in row)
         
-        # 早期/晚期阶段使用贪婪算法
-        if max_tile < 64 or empty_count <= 3 or self.failed_calls >= 2:
+        # 早期晚期阶段使用贪婪算法
+        if max_tile < 256 or empty_count <= 3 or self.failed_calls >= 2:
             return self._fallback_to_greedy()
         
         # 中期使用LLM
@@ -123,6 +125,7 @@ class LLM_AI2048(Greedy_AI2048):
             self.failed_calls += 1
             print(f"LLM调用错误: {str(e)[:100]}...")
             return self._fallback_to_greedy()
+
 
     def _fallback_to_greedy(self):
         """回退到贪婪算法"""
@@ -144,48 +147,62 @@ class LLM_AI2048(Greedy_AI2048):
         
         return direction
 
+    
     def _get_move_from_llm(self, grid_tuple):
-        """从LLM获取移动方向"""
+        """从多个LLM获取移动方向并投票"""
         ensure_api_key()
         start_time = time.time()
-        
-        # 准备游戏状态描述
         game_state_text = self._format_game_state()
         prompt = self.prompt_template.format(game_state_text)
-        
-        # 调用LLM API
-        response = Generation.call(
-            model=self.model,
-            prompt=prompt,
-            result_format='message',
-            max_tokens=1000,
-            temperature=0.1
-        )
-        
-        content = response.output.choices[0]['message']['content']
-        direction = self._parse_llm_response(content)
-        
-        # 验证方向有效性
-        if direction not in [0, 1, 2, 3] or not self._is_valid_move(direction):
-            old_direction = direction
-            direction = super().get_move()  # 使用父类方法
-            content += f"\n[无效移动 {old_direction}，已替换为有效移动 {direction}]"
-        
+
+        # 多模型协作
+        models = [self.model, "qwen-plus", "qwen-turbo"]
+        directions = []
+        responses = []
+        for model in models:
+            try:
+                response = Generation.call(
+                    model=model,
+                    prompt=prompt,
+                    result_format='message',
+                    max_tokens=1000,
+                    temperature=0.1
+                )
+                content = response.output.choices[0]['message']['content']
+                direction = self._parse_llm_response(content)
+                directions.append(direction)
+                responses.append(f"[{model}] {content}")
+            except Exception as e:
+                directions.append(None)
+                responses.append(f"[{model}] 调用失败: {e}")
+
+        # 投票选出最多的方向（排除None和非法方向）
+        valid_dirs = [d for d in directions if d in [0, 1, 2, 3] and self._is_valid_move(d)]
+        if valid_dirs:
+            from collections import Counter
+            direction = Counter(valid_dirs).most_common(1)[0][0]
+        else:
+            direction = super().get_move()
+            responses.append(f"[投票无效] 使用贪婪算法方向: {direction}")
+
         # 记录决策
         process_time = time.time() - start_time
         self.move_history.append({
             "state": game_state_text,
-            "response": content,
+            "responses": responses,
+            "response": "\n\n".join(responses),
+            "directions": directions,
             "direction": direction,
             "time": time.time(),
             "process_time": process_time
         })
-        
+
         # 缓存决策
         self.decision_cache[grid_tuple] = direction
         self.failed_calls = 0
-        
+
         return direction
+    
 
     def _is_valid_move(self, direction):
         """检查移动是否有效"""
@@ -194,13 +211,13 @@ class LLM_AI2048(Greedy_AI2048):
             
         game_copy = copy.deepcopy(self.game)
         return game_copy.move(direction)
-    
+
+
     def _format_game_state(self):
         """格式化游戏状态"""
         grid = self.game.get_grid()
         score = self.game.get_score()
         
-        # 简化网格显示
         grid_text = "网格:\n"
         for row in grid:
             grid_text += "|" + "|".join(f"{cell:^4}" if cell else "    " for cell in row) + "|\n"
@@ -222,6 +239,7 @@ class LLM_AI2048(Greedy_AI2048):
         
         return state_text
 
+
     def _parse_llm_response(self, response_text):
         """解析LLM响应获取方向"""
         # 查找数字方向
@@ -229,7 +247,7 @@ class LLM_AI2048(Greedy_AI2048):
             r'最终(?:选择|决策|方向)[^\d]*?([0-3])',
             r'(?:选择|决策|方向)[是为]?\s*?([0-3])',
             r'(?:方向|决策|移动|选择)\D*?([0-3])[^0-9]*$',
-            r'([0-3])\s*$'  # 最后一行只有一个数字
+            r'([0-3])\s*$'
         ]
         
         for pattern in patterns:
@@ -259,6 +277,7 @@ class LLM_AI2048(Greedy_AI2048):
         # 默认返回左移
         return 3
 
+
     def get_stats(self):
         """获取统计信息"""
         return {
@@ -269,7 +288,8 @@ class LLM_AI2048(Greedy_AI2048):
             "llm_enabled": self.use_llm,
             "decisions_count": len(self.move_history)
         }
-    
+
+
     def save_history(self, filename=None):
         """保存决策历史"""
         if not self.move_history:
@@ -328,9 +348,10 @@ def create_gradio_interface():
             max-width: 450px;
             margin: 0 auto;
             padding: 15px;
-            background: #bbada0;
-            border-radius: 8px;
+            background: #16213e; /* 深蓝棋盘背景 */
+            border-radius: 10px;
             position: relative;
+            box-shadow: 0 4px 24px #000a;
         }
         .grid {
             display: grid;
@@ -345,33 +366,34 @@ def create_gradio_interface():
             align-items: center;
             font-size: 32px;
             font-weight: bold;
-            border-radius: 5px;
+            border-radius: 8px;
             transition: all 0.1s ease;
-            box-shadow: 0 0 5px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 8px #0004;
+            background: #233554;
+            color: #e0eafc;
+            border: 2px solid #233554;
         }
-        .cell-2 { background: #eee4da; color: #776e65; }
-        .cell-4 { background: #ede0c8; color: #776e65; }
-        .cell-8 { background: #f2b179; color: #f9f6f2; }
-        .cell-16 { background: #f59563; color: #f9f6f2; }
-        .cell-32 { background: #f67c5f; color: #f9f6f2; }
-        .cell-64 { background: #f65e3b; color: #f9f6f2; }
-        .cell-128 { background: #edcf72; color: #f9f6f2; font-size: 28px; }
-        .cell-256 { background: #edcc61; color: #f9f6f2; font-size: 28px; }
-        .cell-512 { background: #edc850; color: #f9f6f2; font-size: 28px; }
-        .cell-1024 { background: #edc53f; color: #f9f6f2; font-size: 24px; }
-        .cell-2048 { background: #edc22e; color: #f9f6f2; font-size: 24px; }
-        .cell-0 { background: #cdc1b4; }
+        .cell-2    { background: #274690; color: #e0eafc; }
+        .cell-4    { background: #576cbc; color: #e0eafc; }
+        .cell-8    { background: #21e6c1; color: #16213e; }
+        .cell-16   { background: #278ea5; color: #fff; }
+        .cell-32   { background: #1f4287; color: #fff; }
+        .cell-64   { background: #071e3d; color: #fff; }
+        .cell-128  { background: #f6c90e; color: #16213e; font-size: 28px; }
+        .cell-256  { background: #ffb400; color: #16213e; font-size: 28px; }
+        .cell-512  { background: #ff6363; color: #fff; font-size: 28px; }
+        .cell-1024 { background: #ff1818; color: #fff; font-size: 24px; }
+        .cell-2048 { background: #21e6c1; color: #16213e; font-size: 24px; }
+        .cell-0    { background: #233554; color: #233554; }
         </style>
         
         <div class="game-container">
         <div class="grid">
         """
-        
         for row in grid:
             for cell in row:
                 value = cell if cell > 0 else ""
                 html += f'<div class="cell cell-{cell}">{value}</div>'
-        
         html += """
         </div>
         </div>
@@ -384,20 +406,43 @@ def create_gradio_interface():
             return ""
         
         move_number = global_state["move_count"]
-        
-        md = f"## 移动 #{move_number}\n\n"
-        
         direction_names = ['上', '右', '下', '左']
         direction = thoughts.get('direction', 0)
-        md += f"**方向:** {direction_names[direction]} (代码:{direction})\n\n"
+        process_time = thoughts.get('process_time', None)
+        response = thoughts.get('response', '无详细分析')
 
-        if 'process_time' in thoughts:
-            md += f"**处理时间:** {thoughts['process_time']:.3f}秒\n\n"
-
-        md += "**分析:**\n\n"
-        md += f"```\n{thoughts['response']}\n```"
-        
-        return md
+        html = f"""
+<style>
+.thoughts-box {{
+    background: #183153 !important;
+    color: #fff !important;
+    border-radius: 10px;
+    padding: 18px 18px 12px 18px;
+    font-size: 16px;
+    font-family: 'Microsoft YaHei', 'sans-serif';
+    margin-bottom: 8px;
+    margin-top: 8px;
+    word-break: break-all;
+    box-shadow: 0 2px 12px #0006;
+}}
+.thoughts-box pre {{
+    background: transparent !important;
+    color: #fff !important;
+    font-size: 15px;
+    margin: 0;
+    padding: 0;
+}}
+</style>
+<div class="thoughts-box">
+<b>移动:{move_number}</b><br>
+<b>方向:</b> {direction_names[direction]} (代码:{direction})<br>
+"""
+        if process_time is not None:
+            html += f"<b>处理时间:</b> {process_time:.3f}秒<br>"
+        html += "<b>分析:</b><br>"
+        html += f"<pre>{response}</pre>"
+        html += "</div>"
+        return html
     
     def make_move():
         """执行一步移动"""
@@ -410,8 +455,7 @@ def create_gradio_interface():
         start_time = time.time()
         direction = global_state["ai"].get_move()
         decision_time = time.time() - start_time
-        
-        # 修复：执行实际移动
+
         moved = global_state["game"].move(direction)
         
         global_state["move_count"] += 1
@@ -430,13 +474,11 @@ def create_gradio_interface():
         status = global_state["game"].get_game_state()
         status_text = "进行中"
         
-        # 修复：当达到2048也算成功
         if status == 1 or max_tile >= 2048:
             status_text = "胜利！"
         elif status == 2:
             status_text = "失败"
         
-        # 判断使用LLM还是贪婪算法
         method = "贪婪" if thoughts and "使用贪婪" in thoughts.get('response', "") else "LLM"
         
         return format_grid(global_state["game"].get_grid()), f"移动 #{global_state['move_count']}: {'上右下左'[direction]} ({method})，分数={global_state['game'].get_score()}，状态={status_text}", thoughts_md
@@ -451,8 +493,8 @@ def create_gradio_interface():
         result = format_grid(global_state["game"].get_grid()), f"自动游戏开始，分数: {global_state['game'].get_score()}", ""
         yield result
         
-        update_frequency = 3  # 每3步更新一次UI
-        min_update_interval = 0.5  # 最小更新间隔(秒)
+        update_frequency = 1  # 每1步更新一次UI
+        min_update_interval = 0.2  # 最小更新间隔(s)
         steps_since_update = 0
         
         while global_state["running"] and global_state["game"]:
@@ -510,7 +552,7 @@ def create_gradio_interface():
             stats = global_state["ai"].get_stats()
             cache_hit = f"缓存命中率: {stats['cache_hit_ratio']:.1%}" if stats else ""
             return f"游戏历史已保存到 {filename}，共{global_state['move_count']}步，最终分数: {global_state['game'].get_score()}，{cache_hit}"
-        return "AI未初始化，无法保存历史"
+        return "无法保存历史"
     
     def set_api_key(key):
         """设置API密钥"""
@@ -533,7 +575,7 @@ def create_gradio_interface():
             return f"API密钥设置失败: {str(e)}"
     
     # 创建Gradio界面
-    with gr.Blocks(title="LLM玩2048") as demo:
+    with gr.Blocks(title="LLM玩2048", theme=deep_sea_theme) as demo:
         gr.Markdown("# 🤖 通义千问玩2048")
         gr.Markdown("使用大语言模型来玩2048游戏")
         
@@ -561,7 +603,7 @@ def create_gradio_interface():
                 save_status = gr.Textbox(label="保存状态")
                 
             with gr.Column(scale=4):
-                thoughts_display = gr.Markdown()
+                thoughts_display = gr.HTML()
         
         api_button.click(set_api_key, inputs=[api_input], outputs=[api_status])
         init_button.click(initialize_game, inputs=[], outputs=[grid_display, status_text, thoughts_display])

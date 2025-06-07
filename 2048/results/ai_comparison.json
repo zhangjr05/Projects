@@ -1,0 +1,30 @@
+{
+    "ai_types": [
+        "\u8d2a\u5a6a",
+        "MCTS",
+        "ML\u589e\u5f3a"
+    ],
+    "comparison": {
+        "greedy": {
+            "average_score": 16612.04,
+            "highest_score": 21356,
+            "average_max_tile": 1438.72,
+            "highest_max_tile": 2048,
+            "success_rate_2048": 45.0
+        },
+        "mcts": {
+            "average_score": 14432.0,
+            "highest_score": 25768,
+            "average_max_tile": 1387.52,
+            "highest_max_tile": 4096,
+            "success_rate_2048": 34.0
+        },
+        "ml_enhanced": {
+            "average_score": 18108.0,
+            "highest_score": 21216,
+            "average_max_tile": 1638.0,
+            "highest_max_tile": 2048,
+            "success_rate_2048": 60.0
+        }
+    }
+}
